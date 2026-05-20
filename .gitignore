@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────
+# RGPVMate — .gitignore
+# ─────────────────────────────────────────
+
+# ── Environment / Secrets ─────────────────
+.env
+.env.local
+.env.production
+.env.*.local
+
+# ── Node.js ───────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn
+
+# ── Python ────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Next.js / React ───────────────────────
+.next/
+out/
+.vercel
+
+# ── OS ────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Uploaded / temp PDFs ──────────────────
+# Keep the /documents folder structure but ignore actual PDFs
+# (PDFs are large and shouldn't be version-controlled)
+documents/**/*.pdf
+backend/documents/tmp/
+
+# ── ChromaDB local data ───────────────────
+chroma_data/
+*.chroma
+
+# ── Logs ──────────────────────────────────
+logs/
+*.log
+
+# ── Misc ──────────────────────────────────
+*.zip
+*.tar.gz
+.cache/
