@@ -63,6 +63,21 @@ const PROGRAM_MAP = {
   'DDI-PG':             'DDIPG',
 };
 
+// ── Single-branch programs ────────────────────────────────────────────────────
+// These programs have no branch subdivision — the program itself IS the branch.
+// For these we skip BRANCH_RULES entirely and use 'GENERAL' as the branch token.
+const SINGLE_BRANCH_PROGRAMS = new Set([
+  'MCA', 'MCA2', 'MCADUAL',          // MCA family
+  'MBA', 'MBAINT',                    // MBA family
+  'BPHARM', 'BPHARMPCI',             // B.Pharm variants
+  'MPHARM', 'MPHARMPCI', 'PHARMD',   // Postgrad Pharmacy
+  'BARCH', 'MARCH', 'BDESIGN',       // Architecture / Design
+  'MPLAN',                            // Planning
+  'MTECHPT', 'BTECHPTDC', 'BEPTDC',  // Part-time / PTDC variants
+  'DDIPG', 'DIPLOMA',                // Diploma
+  'PHD', 'PHDENT', 'PGCMB',         // Research / PG cert
+]);
+
 // ── System Type map ───────────────────────────────────────────────────────────
 const SYSTEM_TYPE_MAP = {
   'Grading System':     'GRADING',
@@ -372,8 +387,12 @@ async function scrape() {
           if (seenInBatch.has(dedupKey)) continue;
           seenInBatch.add(dedupKey);
 
-          // Map title to branch token
-          const branchToken = titleToBranchToken(title);
+          // Map title to branch token.
+          // Single-branch programs skip regex detection entirely → 'GENERAL'.
+          // Multi-branch programs run BRANCH_RULES; truly unknown ones are logged.
+          const branchToken = SINGLE_BRANCH_PROGRAMS.has(programToken)
+            ? 'GENERAL'
+            : titleToBranchToken(title);
           const yearHint    = extractYear(title);
 
           if (!branchToken) {
