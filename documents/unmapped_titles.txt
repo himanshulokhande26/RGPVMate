@@ -913,3 +913,8 @@
 [MTECH][GRADING][SEM3] "Production Engineering (Grading)"
 [MTECH][GRADING][SEM3] "Environmental Engineering (Grading System)"
 [MTECH][GRADING][SEM3] "Artificial Intelligence and Machine Learning"
+[BTECH][GRADING][SEM4] "Artificial Intelligence and Machine Learning"
+[BTECH][GRADING][SEM5] "Syllabus BTech V Sem Artificial Intelligence"
+[BTECH][GRADING][SEM5] "Syllabus Btech Electronics Communi ACT V Sem"
+[BTECH][GRADING][SEM6] "Syallbus Artificial Intelligence Machine Learning"
+[BTECH][GRADING][SEM6] "Syllabus BTech ACT VI Semest"

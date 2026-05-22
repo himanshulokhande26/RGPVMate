@@ -69,6 +69,7 @@ const PROGRAM_MAP = {
 const SINGLE_BRANCH_PROGRAMS = new Set([
   'MCA', 'MCA2', 'MCADUAL',          // MCA family
   'MBA', 'MBAINT',                    // MBA family
+  'MTECH', 'ME',                      // PG Engineering (specialisation = the programme)
   'BPHARM', 'BPHARMPCI',             // B.Pharm variants
   'MPHARM', 'MPHARMPCI', 'PHARMD',   // Postgrad Pharmacy
   'BARCH', 'MARCH', 'BDESIGN',       // Architecture / Design
@@ -151,8 +152,33 @@ const BRANCH_RULES = [
   [/agriculture/i,                                               'AGE'],
 
   // ── Misc ──────────────────────────────────────────────
-  [/fire\s+technology/i,                                         'FIRE'],
-  [/industrial\s+production/i,                                   'IP'],
+  [/fire\s+tech(?:nology)?(?:\s+and\s+safety)?/i,              'FIRE'],
+  [/industrial\s+prod(?:uction)?/i,                              'IP'],
+  [/textile\s+(?:tech(?:nology)?|engg\.?|engineering)/i,        'TX'],
+  [/aeronaut(?:ical|ic)/i,                                       'AME'],
+
+  // ── BE / old-style branch abbreviations ───────────────
+  // Titles like "B.E.(CS)", "BE(EC)", "EI (Grading System)", "B.E. EC New CBGS"
+  // Must come AFTER all full-name rules to avoid false matches.
+  [/\b(?:b\.?e\.?\s*\(\s*)?cse\s*\)?(?:\s|$|,|\()/i,           'CSE'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?cs\s*\)?(?:\s|$|,|\()/i,            'CSE'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ece\s*\)?(?:\s|$|,|\()/i,           'EC'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ec\s*\)?(?:\s|$|,|\()/i,            'EC'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ee\s*\)?(?:\s|$|,|\()/i,            'EE'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ei\s*\)?(?:\s|$|,|\()/i,            'EI'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ex\s*\)?(?:\s|$|,|\()/i,            'EI'],  // EX = Electronics
+  [/\b(?:b\.?e\.?\s*\(\s*)?ft\s*\)?(?:\s|$|,|\()/i,            'FIRE'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?it\s*\)?(?:\s|$|,|\()/i,            'IT'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?me\s*\)?(?:\s|$|,|\()/i,            'ME'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ce\s*\)?(?:\s|$|,|\()/i,            'CE'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?au\s*\)?(?:\s|$|,|\()/i,            'AUTO'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?bm\s*\)?(?:\s|$|,|\()/i,            'BM'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?bt\s*\)?(?:\s|$|,|\()/i,            'BT'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?cm\s*\)?(?:\s|$|,|\()/i,            'MIN'],  // CM = Coal/Mining
+  [/\b(?:b\.?e\.?\s*\(\s*)?tx\s*\)?(?:\s|$|,|\()/i,            'TX'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ip(?:e)?\s*\)?(?:\s|$|,|\()/i,      'IP'],
+  [/\b(?:b\.?e\.?\s*\(\s*)?ie(?:m)?\s*\)?(?:\s|$|,|\()/i,      'IP'],  // IEM = Industrial Engg & Mgmt
+  [/\b(?:b\.?e\.?\s*\(?\s*)?minin/i,                            'MIN'],
 
   // ── MBA / PG specialisations ──────────────────────────
   // Check specific specialisations before the generic MBA catch-all.
