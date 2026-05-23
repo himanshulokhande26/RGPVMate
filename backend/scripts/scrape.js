@@ -145,8 +145,8 @@ const BRANCH_RULES = [
   [/mining/i,                                                    'MIN'],
 
   // ── Bio / Pharma ──────────────────────────────────────
-  [/biomedical/i,                                                'BM'],
-  [/biotechnology/i,                                             'BT'],
+  [/bio[\s\-]?medical/i,                                           'BM'],
+  [/bio[\s\-]?technology|bio\s+tech\b/i,                          'BT'],
 
   // ── Agriculture ───────────────────────────────────────
   [/agriculture\s+technology/i,                                  'AG'],
@@ -155,6 +155,10 @@ const BRANCH_RULES = [
   // ── Misc ──────────────────────────────────────────────
   [/fire\s+tech(?:nology)?(?:\s+and\s+safety)?/i,              'FIRE'],
   [/industrial\s+prod(?:uction)?/i,                              'IP'],
+  [/industrial\s+engg?\.?(?:\s+and)?\s+management/i,            'IEM'],  // "Industrial Engg. and Management"
+  [/industrial\s+engg?\.?\s+mgt/i,                              'IEM'],  // "Industrial Engg. Mgt,"
+  [/information\s+tech(?:nology)?\.?/i,                         'IT'],   // "Information Tech", "Information Tech."
+  [/computer\s+sc(?:ience)?\.?(?:\s+and)?(?:\s+engg?)?/i,       'CSE'],  // "Computer Sc.", "Computer Sc. and Engg."
   [/textile\s+(?:tech(?:nology)?|engg\.?|engineering)/i,        'TX'],
   [/aeronaut(?:ical|ic)/i,                                       'AME'],
 
@@ -226,6 +230,8 @@ const BRANCH_RULES = [
   [/thermal\s+engg?|heat\s+power/i,                             'THERMAL'],
   [/production\s+engg?(?:\.|ineering)?/i,                       'PRODENG'],
   [/adv\.?\s+prod(?:uction)?\s+sys/i,                           'APS'],
+  [/advance\s+prod(?:uction)?(?:\s+sys(?:tem)?)?/i,             'APS'],   // "Advance Production System" with or without 'Sys'
+  [/const(?:ruction)?\.?\s+tech(?:nology)?|const(?:ruction)?\s+plan/i, 'CONSTENG'],  // "Const. Tech."
   [/computer\s+integrated\s+m(?:fg|anuf)/i,                     'CIM'],
   [/cad\s*[-\/]?\s*cam/i,                                       'CADCAM'],
   [/digital\s+comm(?:unication)?/i,                             'DIGCOM'],
@@ -502,6 +508,7 @@ async function scrape() {
           }
 
           console.log(`  📄 [SEM${currentSemester}] ${branchToken}${yearHint ? ` (${yearHint})` : ''} → ${filename}`);
+          if (branchToken === 'UNKNOWN') console.log(`      ↳ title: "${title}"`);
 
           if (DRY_RUN) {
             stats.downloaded++;
