@@ -69,9 +69,10 @@ const PROGRAM_MAP = {
 const SINGLE_BRANCH_PROGRAMS = new Set([
   'MCA', 'MCA2', 'MCADUAL',          // MCA family
   'MBA', 'MBAINT',                    // MBA family
-  'MTECH', 'ME',                      // PG Engineering (specialisation = the programme)
-  'BPHARM', 'BPHARMPCI',             // B.Pharm variants
-  'MPHARM', 'MPHARMPCI', 'PHARMD',   // Postgrad Pharmacy
+  // NOTE: MTECH, ME, MPHARM, MPHARMPCI are NOT here — they have sub-specialisations
+  // and are handled by BRANCH_RULES below.
+  'BPHARM', 'BPHARMPCI',             // B.Pharm variants (no sub-branches on RGPV)
+  'PHARMD',                           // Pharm D. (year-based, no specialisation)
   'BARCH', 'MARCH', 'BDESIGN',       // Architecture / Design
   'MPLAN',                            // Planning
   'MTECHPT', 'BTECHPTDC', 'BEPTDC',  // Part-time / PTDC variants
@@ -174,14 +175,13 @@ const BRANCH_RULES = [
   [/\b(?:b\.?e\.?\s*\(\s*)?au\s*\)?(?:\s|$|,|\()/i,            'AUTO'],
   [/\b(?:b\.?e\.?\s*\(\s*)?bm\s*\)?(?:\s|$|,|\()/i,            'BM'],
   [/\b(?:b\.?e\.?\s*\(\s*)?bt\s*\)?(?:\s|$|,|\()/i,            'BT'],
-  [/\b(?:b\.?e\.?\s*\(\s*)?cm\s*\)?(?:\s|$|,|\()/i,            'MIN'],  // CM = Coal/Mining
+  [/\b(?:b\.?e\.?\s*\(\s*)?cm\s*\)?(?:\s|$|,|\()/i,            'MIN'],
   [/\b(?:b\.?e\.?\s*\(\s*)?tx\s*\)?(?:\s|$|,|\()/i,            'TX'],
   [/\b(?:b\.?e\.?\s*\(\s*)?ip(?:e)?\s*\)?(?:\s|$|,|\()/i,      'IP'],
-  [/\b(?:b\.?e\.?\s*\(\s*)?ie(?:m)?\s*\)?(?:\s|$|,|\()/i,      'IP'],  // IEM = Industrial Engg & Mgmt
+  [/\b(?:b\.?e\.?\s*\(\s*)?ie(?:m)?\s*\)?(?:\s|$|,|\()/i,      'IP'],
   [/\b(?:b\.?e\.?\s*\(?\s*)?minin/i,                            'MIN'],
 
   // ── MBA / PG specialisations ──────────────────────────
-  // Check specific specialisations before the generic MBA catch-all.
   [/pharmaceutical\s+management|pharma\s+management/i,          'PHARMA'],
   [/financial\s+administration|financial\s+admin/i,             'FA'],
   [/marketing\s+management|marketing\s+mgmt/i,                  'MM'],
@@ -197,10 +197,6 @@ const BRANCH_RULES = [
   [/urban\s+planning|town\s+planning/i,                         'PLAN'],
   [/fashion\s+design|textile\s+design/i,                        'DESIGN'],
 
-  // ── Pharmacy / Health programs ────────────────────────
-  [/pharmacology/i,                                              'PHARMD'],
-  [/pharmaceutics/i,                                             'PHARMD'],
-
   // ── M.Pharm specialisations (‘MPharm PCI …’ titles) ────────
   // Must come AFTER pharmaceutical\s+management (MBA) to avoid false match.
   [/pharmacy\s+practice/i,                                       'PHRMPRAC'],
@@ -211,14 +207,66 @@ const BRANCH_RULES = [
   [/pharmaceutics/i,                                             'PHARMD'],
   [/pharmacology/i,                                              'PHARMD'],
 
-  // ── MCA / MBA catch-alls (program-level, no sub-branch) ─────
-  [/m\.?c\.?a\.?(?:\s*\(|$|\s)/i,                                'GENERAL'],  // "M.C.A. I sem", "MCA (Grading Sys.)"
-  [/mca\s+dual\s+degree/i,                                       'GENERAL'],
-  [/master\s+of\s+applied\s+management/i,                        'MAM'],  // MBA Integrated
-  [/master\s+in\s+business\s+administration|master\s+of\s+business/i, 'GENERAL'],
-  [/master\s+of\s+computer\s+application|master\s+in\s+computer/i,   'GENERAL'],
-  [/bachelor\s+of\s+computer\s+application/i,                         'GENERAL'],
-  [/doctor\s+of\s+philosophy|phd\s+syllabus/i,                        'GENERAL'],
+  // ── M.Pharm additional specialisations ──────────────────────
+  [/pharmaceutical\s+analysis/i,                                'PHRMANAL'],
+  [/pharmaceutical\s+tech(?:nology)?/i,                         'PHRMTECH'],
+  [/ph(?:armaceutical)?\s*marketing/i,                          'PHRMKTG'],
+  [/drug\s+regulatory|\bdra\b/i,                                'PHRMREG'],
+  [/\bpmra\b|pharma\.?\s*mgmt/i,                                'PHRMAMGMT'],
+  [/industrial\s+pharmacy/i,                                    'INDPHRM'],
+
+  // ── M.Tech / M.E. specialisations ───────────────────────────
+  [/power\s+system\s+auto(?:mation)?/i,                         'PSA'],
+  [/power\s+system/i,                                           'PWRSYS'],
+  [/power\s+elec(?:tronics)?/i,                                 'PWRELEC'],
+  [/high\s+voltage/i,                                           'HVPS'],
+  [/control\s+system/i,                                         'CTRLSYS'],
+  [/machine\s+design/i,                                         'MCHDES'],
+  [/structural\s+engg?/i,                                       'STRENG'],
+  [/thermal\s+engg?|heat\s+power/i,                             'THERMAL'],
+  [/production\s+engg?(?:\.|ineering)?/i,                       'PRODENG'],
+  [/adv\.?\s+prod(?:uction)?\s+sys/i,                           'APS'],
+  [/computer\s+integrated\s+m(?:fg|anuf)/i,                     'CIM'],
+  [/cad\s*[-\/]?\s*cam/i,                                       'CADCAM'],
+  [/digital\s+comm(?:unication)?/i,                             'DIGCOM'],
+  [/digital\s+electronics/i,                                    'DIGELEC'],
+  [/digital\s+instrument/i,                                     'DIGINST'],
+  [/microwave/i,                                                 'MICROWAVE'],
+  [/transport(?:ation)?\s+engg?/i,                              'TRANSENG'],
+  [/construction\s+(?:tech|planning|mgt|mgmt|management)/i,     'CONSTENG'],
+  [/building\s+construction/i,                                  'CONSTENG'],
+  [/industrial\s+design/i,                                      'INDDES'],
+  [/industrial\s+safety/i,                                      'INDSAFE'],
+  [/energy\s+tech(?:nology)?/i,                                 'ENETECH'],
+  [/environmental\s+engg?/i,                                    'ENVENG'],
+  [/nanotechnology/i,                                           'NANO'],
+  [/software\s+(?:engg?|system)/i,                              'SWENG'],
+  [/cta|computer\s+tech.*app/i,                                 'CTATECH'],
+  [/urban.*regional.*planning|m\.?\s*plan\b/i,                  'URPPLAN'],
+  [/production\s+and\s+ind/i,                                   'APS'],
+  [/computer\s+sc(?:ience)?(?:\.)?(?:\s+and)?\s+engg?/i,        'CSE'],  // "Computer Sc. and Engg."
+  [/industrial\s+engg?\.?\s+(?:and\s+)?management/i,            'IEM'],  // "Industrial Engg. and Management"
+
+  // ── B.E. / B.Tech remaining patterns ────────────────────────
+  [/artificial\s+intelligence/i,                                'CSEAI'],
+  [/electronics?.*act\b/i,                                      'ECACT'],
+  [/cbcs.*admitted|cbgs.*admitted|admitted.*students/i,         'COMMON'],
+  [/b\.?e\.?\s+cbcs|b\.?e\.?\s+cbgs/i,                         'COMMON'],
+
+  // ── Program-level single-doc catch-alls ─────────────────────
+  [/m\.?c\.?a\.?/i,                                             'GENERAL'],
+  [/master\s+of\s+applied\s+management/i,                       'MAM'],
+  [/master.*business.*administration/i,                          'GENERAL'],
+  [/master.*computer.*application/i,                            'GENERAL'],
+  [/bachelor.*computer.*application/i,                          'GENERAL'],
+  [/b\.?pharm?/i,                                               'GENERAL'],
+  [/m\.?pharm?/i,                                               'GENERAL'],
+  [/b\.?arch/i,                                                 'GENERAL'],
+  [/pharm\s*d\.?/i,                                             'GENERAL'],
+
+  // ── Absolute last-resort: matches everything ─────────────────
+  // Files saved as UNKNOWN_* for manual review post-scrape.
+  [/[\s\S]/,                                                     'UNKNOWN'],
 ];
 
 function titleToBranchToken(title) {
@@ -437,8 +485,15 @@ async function scrape() {
             continue;
           }
 
-          // Build target filename
-          const filename = buildFilename(programToken, sysToken, branchToken, currentSemester, yearHint);
+          // Build target filename, appending a numeric suffix to avoid collisions
+          // when multiple specialisations map to the same branch token + semester.
+          let filename = buildFilename(programToken, sysToken, branchToken, currentSemester, yearHint);
+          let collisionCount = 1;
+          while (seenInBatch.has(`FILE:${filename}`) || existing.has(filename)) {
+            collisionCount++;
+            filename = buildFilename(programToken, sysToken, `${branchToken}_${collisionCount}`, currentSemester, yearHint);
+          }
+          seenInBatch.add(`FILE:${filename}`);
 
           if (existing.has(filename)) {
             console.log(`  ⏭️  [SEM${currentSemester}] ${branchToken} — already exists`);
