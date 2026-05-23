@@ -17,6 +17,7 @@ const DOCS_ROOT = path.join(__dirname, '../../documents');
 // Map folder names → document types used by chunker.js
 const FOLDER_TYPE_MAP = {
   syllabus: 'syllabus',
+  scheme:   'scheme',
   pyq:      'pyq',
   rules:    'rules',
   calendar: 'calendar',

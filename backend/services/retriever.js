@@ -1,26 +1,47 @@
 // services/retriever.js
-// Handles: embedding via Python service + ChromaDB operations
+// Handles: embedding via Python service + Qdrant Cloud operations
 // Full implementation: Phase 3 (ingestion) + Phase 4 (query)
 'use strict';
 
 const axios = require('axios');
-const { ChromaClient } = require('chromadb');
+const { QdrantClient } = require('@qdrant/js-client-rest');
 
 const COLLECTION_NAME = 'rgpvmate_docs';
-let collection = null;
 
-// ── ChromaDB Client ───────────────────────────────────────────
-const chroma = new ChromaClient({
-  path: process.env.CHROMA_URL || 'http://localhost:8000',
+// Initialize Qdrant Client
+const qdrant = new QdrantClient({
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY,
 });
 
 /**
- * Get or create the ChromaDB collection (called once at startup or on first use).
+ * Convert a 32-character hex string (like MD5) to a valid UUID format (8-4-4-4-12)
+ */
+function toUuid(md5Hex) {
+  return `${md5Hex.slice(0, 8)}-${md5Hex.slice(8, 12)}-${md5Hex.slice(12, 16)}-${md5Hex.slice(16, 20)}-${md5Hex.slice(20, 32)}`;
+}
+
+/**
+ * Get or create the Qdrant collection (called once at startup or on first use).
  */
 async function getCollection() {
-  if (collection) return collection;
-  collection = await chroma.getOrCreateCollection({ name: COLLECTION_NAME });
-  return collection;
+  try {
+    const collections = await qdrant.getCollections();
+    const exists = collections.collections.some(c => c.name === COLLECTION_NAME);
+    
+    if (!exists) {
+      console.log(`Creating Qdrant collection: ${COLLECTION_NAME}...`);
+      await qdrant.createCollection(COLLECTION_NAME, {
+        vectors: {
+          size: 384,
+          distance: 'Cosine',
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Failed to get/create Qdrant collection:', err.message);
+    throw err;
+  }
 }
 
 // ── Embedding ─────────────────────────────────────────────────
@@ -35,50 +56,81 @@ async function getEmbedding(text) {
   return response.data.vector;
 }
 
-// ── ChromaDB Operations ───────────────────────────────────────
+// ── Qdrant Operations ───────────────────────────────────────
 
 /**
- * Adds an array of chunks to ChromaDB.
+ * Adds an array of chunks to Qdrant Cloud.
  * @param {{ id: string, text: string, vector: number[], metadata: object }[]} chunks
  */
 async function addChunks(chunks) {
-  const col = await getCollection();
-  await col.add({
-    ids:        chunks.map(c => c.id),
-    documents:  chunks.map(c => c.text),
-    embeddings: chunks.map(c => c.vector),
-    metadatas:  chunks.map(c => c.metadata),
+  await getCollection();
+  
+  const points = chunks.map(c => ({
+    id: toUuid(c.id),
+    vector: c.vector,
+    payload: {
+      text: c.text,
+      ...c.metadata,
+    }
+  }));
+
+  await qdrant.upsert(COLLECTION_NAME, {
+    wait: true,
+    points,
   });
-  console.log(`✅ Added ${chunks.length} chunks to ChromaDB`);
+  console.log(`✅ Added ${chunks.length} chunks to Qdrant Cloud`);
 }
 
 /**
- * Searches ChromaDB for the top-K most semantically similar chunks.
+ * Searches Qdrant Cloud for the top-K most semantically similar chunks.
  * @param {number[]} queryVector — embedded query
  * @param {object} filters — optional metadata filters e.g. { semester: 5 }
  * @param {number} topK — number of results to return (default 4)
  * @returns {{ text: string, metadata: object, distance: number }[]}
  */
 async function searchChunks(queryVector, filters = {}, topK = 4) {
-  const col = await getCollection();
+  await getCollection();
 
-  // Build ChromaDB where clause from filters (only include non-null values)
-  const where = {};
-  if (filters.semester) where.semester = { $eq: filters.semester };
-  if (filters.branch)   where.branch   = { $eq: filters.branch };
-  if (filters.type)     where.type     = { $eq: filters.type };
+  const filter = {
+    must: []
+  };
 
-  const results = await col.query({
-    queryEmbeddings: [queryVector],
-    nResults: topK,
-    where: Object.keys(where).length > 0 ? where : undefined,
-  });
+  if (filters.semester) {
+    filter.must.push({
+      key: 'semester',
+      match: { value: filters.semester }
+    });
+  }
+  if (filters.branch) {
+    filter.must.push({
+      key: 'branch',
+      match: { value: filters.branch }
+    });
+  }
+  if (filters.type) {
+    filter.must.push({
+      key: 'type',
+      match: { value: filters.type }
+    });
+  }
 
-  // Flatten results into usable objects
-  return results.documents[0].map((text, i) => ({
-    text,
-    metadata: results.metadatas[0][i],
-    distance: results.distances[0][i],
+  const searchParams = {
+    vector: queryVector,
+    limit: topK,
+    with_payload: true,
+  };
+
+  if (filter.must.length > 0) {
+    searchParams.filter = filter;
+  }
+
+  const results = await qdrant.search(COLLECTION_NAME, searchParams);
+
+  // Flatten results into standard shapes
+  return results.map(r => ({
+    text: r.payload.text,
+    metadata: { ...r.payload },
+    distance: 1 - r.score, // Distance (lower is closer) = 1 - similarity score
   }));
 }
 
@@ -88,8 +140,17 @@ async function searchChunks(queryVector, filters = {}, topK = 4) {
  * @param {string} sourceName — e.g. 'RGPV_Ordinance_2023.pdf'
  */
 async function deleteChunksBySource(sourceName) {
-  const col = await getCollection();
-  await col.delete({ where: { source: { $eq: sourceName } } });
+  await getCollection();
+  await qdrant.delete(COLLECTION_NAME, {
+    filter: {
+      must: [
+        {
+          key: 'source',
+          match: { value: sourceName }
+        }
+      ]
+    }
+  });
   console.log(`🗑️  Deleted all chunks for source: ${sourceName}`);
 }
 
@@ -98,13 +159,20 @@ async function deleteChunksBySource(sourceName) {
  * Used by the admin panel's document list.
  */
 async function listDocuments() {
-  const col = await getCollection();
-  const all = await col.get({ include: ['metadatas'] });
+  await getCollection();
+  
+  // Fetch up to 10,000 points scroll with only the 'source' key to keep payload size tiny
+  const scrollResults = await qdrant.scroll(COLLECTION_NAME, {
+    limit: 10000,
+    with_payload: ['source'],
+  });
 
   const counts = {};
-  for (const meta of all.metadatas) {
-    const src = meta.source || 'unknown';
-    counts[src] = (counts[src] || 0) + 1;
+  for (const point of scrollResults.points) {
+    if (point.payload && point.payload.source) {
+      const src = point.payload.source;
+      counts[src] = (counts[src] || 0) + 1;
+    }
   }
 
   return Object.entries(counts).map(([source, chunks]) => ({ source, chunks }));

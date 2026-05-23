@@ -6,14 +6,25 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "ingest": "node scripts/ingest.js"
+    "ingest": "node scripts/ingest.js",
+    "scrape": "node scripts/scrape.js",
+    "scrape:dry": "node scripts/scrape.js --dry-run",
+    "scrape:debug": "node scripts/scrape.js --dry-run --debug --program MBA",
+    "scrape:schemes": "node scripts/scrape_schemes.js",
+    "scrape:schemes:dry": "node scripts/scrape_schemes.js --dry-run"
   },
-  "keywords": ["rgpv", "rag", "ai", "chatbot"],
+  "keywords": [
+    "rgpv",
+    "rag",
+    "ai",
+    "chatbot"
+  ],
   "author": "Himanshu Lokhande",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
+    "@qdrant/js-client-rest": "^1.18.0",
     "axios": "^1.9.0",
     "chromadb": "^2.4.0",
     "cors": "^2.8.5",
@@ -27,6 +38,7 @@
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.0"
+    "nodemon": "^3.0.0",
+    "playwright": "^1.60.0"
   }
 }
