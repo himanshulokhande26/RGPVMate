@@ -430,10 +430,21 @@ async function scrape() {
         await sleep(DELAY_MS);
         if (DEBUG) await page.screenshot({ path: path.join(DOCS_DIR, `_debug_${programToken}_${sysToken}.png`) });
 
-        // ── Parse document table ──────────────────────────────────────────────
-        // Target the specific ASP.NET GridView by its rendered ID.
-        // ASP.NET WebForms renders ContentPlaceHolder1$gvViewAct as:
-        //   ContentPlaceHolder1_gvViewAct
+        const restorePageState = async () => {
+          await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30000 });
+          await page.selectOption('select', { label: 'Syllabus' });
+          await page.waitForLoadState('networkidle');
+          await sleep(DELAY_MS);
+
+          await page.locator('select').nth(1).selectOption({ value: prog.value });
+          await page.waitForLoadState('networkidle');
+          await sleep(DELAY_MS);
+
+          await page.locator('select').nth(2).selectOption({ value: sys.value });
+          await page.waitForLoadState('networkidle');
+          await sleep(DELAY_MS);
+        };
+
         let rowSelector  = '#ContentPlaceHolder1_gvViewAct tr, #ctl00_ContentPlaceHolder1_gvViewAct tr';
         let rowCount     = await page.locator(rowSelector).count();
 
@@ -539,13 +550,22 @@ async function scrape() {
               stats.downloaded++;
               success = true;
 
-              // Wait for page to settle after download postback
-              await page.waitForLoadState('networkidle').catch(() => {});
-              await sleep(DELAY_MS);
+              // Reset page state to clear ASP.NET ViewState/form submission locks
+              console.log('      🔄 Resetting page state for next download...');
+              await restorePageState();
               break; // exit retry loop on success
 
             } catch (dlErr) {
               console.log(`  ⚠️  Download attempt ${attempt}/${maxRetries} failed: ${dlErr.message}`);
+
+              // Reset page state to clean up any stuck submit locks
+              try {
+                console.log('      🔄 Resetting page state...');
+                await restorePageState();
+              } catch (resetErr) {
+                console.log(`      ⚠️  Failed to reset page state: ${resetErr.message}`);
+              }
+
               if (attempt < maxRetries) {
                 const backoff = attempt * 3000;
                 console.log(`      Retrying in ${backoff / 1000}s...`);
