@@ -18,6 +18,8 @@
 const { chromium } = require('playwright');
 const path  = require('path');
 const fs    = require('fs');
+const https = require('https');
+const http  = require('http');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BASE_URL    = 'https://www.rgpv.ac.in/uni/frm_viewscheme.aspx';
@@ -313,6 +315,45 @@ function logUnmapped(line) {
   fs.appendFileSync(UNMAPPED_LOG, line + '\n', 'utf8');
 }
 
+/**
+ * Download a URL directly to disk using Node.js https/http.
+ * Follows up to 5 redirects. Rejects on non-200 or network error.
+ */
+function downloadFromUrl(url, destPath, cookieStr) {
+  return new Promise((resolve, reject) => {
+    const follow = (currentUrl, remaining) => {
+      if (remaining <= 0) return reject(new Error('Too many redirects'));
+      const mod = currentUrl.startsWith('https') ? https : http;
+      const req = mod.get(currentUrl, {
+        headers: {
+          'Cookie': cookieStr,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Referer': BASE_URL,
+        }
+      }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+          const location = res.headers['location'];
+          if (!location) return reject(new Error('Redirect with no Location header'));
+          const redirectUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
+          res.resume(); // drain
+          return follow(redirectUrl, remaining - 1);
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode} for ${currentUrl}`));
+        }
+        const out = fs.createWriteStream(destPath);
+        res.pipe(out);
+        out.on('finish', resolve);
+        out.on('error', reject);
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+    };
+    follow(url, 5);
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function scrape() {
   console.log('═══════════════════════════════════════════════════════════');
@@ -344,6 +385,19 @@ async function scrape() {
   // Suppress console noise from the RGPV page
   page.on('console', () => {});
   page.on('pageerror', () => {});
+
+  // ── Intercept PDF download URLs ──────────────────────────────────────────────
+  // RGPV serves PDFs via: GET /UC/frm_download_file.aspx?Filepath=CDN/...
+  // This GET is fired after the UpdatePanel postback completes — both for
+  // top-level navigations (first click) and sub-resource loads (subsequent
+  // clicks). By intercepting here we capture the URL in ALL cases, then
+  // download the binary directly with Node's https.get().
+  let capturedPdfUrl = null;
+  context.on('request', req => {
+    if (req.url().includes('frm_download_file.aspx')) {
+      capturedPdfUrl = req.url();
+    }
+  });
 
   try {
     console.log('📡 Loading RGPV syllabus page...');
@@ -430,20 +484,7 @@ async function scrape() {
         await sleep(DELAY_MS);
         if (DEBUG) await page.screenshot({ path: path.join(DOCS_DIR, `_debug_${programToken}_${sysToken}.png`) });
 
-        const restorePageState = async () => {
-          await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30000 });
-          await page.selectOption('select', { label: 'Syllabus' });
-          await page.waitForLoadState('networkidle');
-          await sleep(DELAY_MS);
 
-          await page.locator('select').nth(1).selectOption({ value: prog.value });
-          await page.waitForLoadState('networkidle');
-          await sleep(DELAY_MS);
-
-          await page.locator('select').nth(2).selectOption({ value: sys.value });
-          await page.waitForLoadState('networkidle');
-          await sleep(DELAY_MS);
-        };
 
         let rowSelector  = '#ContentPlaceHolder1_gvViewAct tr, #ctl00_ContentPlaceHolder1_gvViewAct tr';
         let rowCount     = await page.locator(rowSelector).count();
@@ -473,9 +514,17 @@ async function scrape() {
           }
 
           // Check if this row has a download link/button (has a PDF download target)
-          const downloadBtn = row.locator('a[href], input[type="submit"], button').first();
+          const downloadBtn = row.locator('a[href*="doPostBack"], input[type="submit"], button').first();
           const hasDownloadBtn = (await downloadBtn.count()) > 0;
           if (!hasDownloadBtn || currentSemester === null) continue;
+
+          // ── Deduplicate by button href ─────────────────────────────────────────
+          // RGPV's GridView renders each document row TWICE (e.g. rows 19 and 21 both
+          // have href pointing to the same ctl08$Lbtn postback). Deduplicate by the
+          // button href so we never click the same postback target more than once.
+          const btnHref = (await downloadBtn.getAttribute('href')) ?? '';
+          if (btnHref && seenInBatch.has(`HREF:${btnHref}`)) continue;
+          if (btnHref) seenInBatch.add(`HREF:${btnHref}`);
 
           // Get the document display title
           let titleEl = row.locator('td:last-child').first();
@@ -533,48 +582,52 @@ async function scrape() {
           }
 
           // ── Download the PDF ────────────────────────────────────────────────
-          const maxRetries = 3;
-          let success = false;
+          // Strategy: click the link → RGPV's UpdatePanel fires a POST → the server
+          // redirects the browser to /UC/frm_download_file.aspx?Filepath=... → we
+          // intercept that GET URL and download the binary directly via https.get().
+          // This works whether the browser opens the PDF as a top-level navigation
+          // (first click) or an inline sub-resource (subsequent clicks).
+          capturedPdfUrl = null;  // reset before each click
 
-          for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-              const destPath = path.join(DOCS_DIR, filename);
+          try {
+            const destPath = path.join(DOCS_DIR, filename);
 
-              const [download] = await Promise.all([
-                page.waitForEvent('download', { timeout: 60000 }), // 60 seconds timeout
-                downloadBtn.click(),
-              ]);
+            // Click the link (triggers the UpdatePanel postback)
+            await downloadBtn.click();
 
-              await download.saveAs(destPath);
-              existing.add(filename);  // mark as downloaded for this run
-              stats.downloaded++;
-              success = true;
-
-              // Reset page state to clear ASP.NET ViewState/form submission locks
-              console.log('      🔄 Resetting page state for next download...');
-              await restorePageState();
-              break; // exit retry loop on success
-
-            } catch (dlErr) {
-              console.log(`  ⚠️  Download attempt ${attempt}/${maxRetries} failed: ${dlErr.message}`);
-
-              // Reset page state to clean up any stuck submit locks
-              try {
-                console.log('      🔄 Resetting page state...');
-                await restorePageState();
-              } catch (resetErr) {
-                console.log(`      ⚠️  Failed to reset page state: ${resetErr.message}`);
-              }
-
-              if (attempt < maxRetries) {
-                const backoff = attempt * 3000;
-                console.log(`      Retrying in ${backoff / 1000}s...`);
-                await sleep(backoff);
-              } else {
-                console.log(`  ❌ Download failed after ${maxRetries} attempts.`);
-                stats.errors++;
-              }
+            // Wait up to 15 seconds for the frm_download_file.aspx URL to be captured
+            const deadline = Date.now() + 15000;
+            while (!capturedPdfUrl && Date.now() < deadline) {
+              await sleep(200);
             }
+
+            if (!capturedPdfUrl) {
+              throw new Error('PDF URL not captured within 15s — no download request seen');
+            }
+
+            // Get current session cookies
+            const cookies = await context.cookies('https://www.rgpv.ac.in');
+            const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+            // Build the full URL if relative
+            const pdfUrl = capturedPdfUrl.startsWith('http')
+              ? capturedPdfUrl
+              : `https://www.rgpv.ac.in${capturedPdfUrl}`;
+
+            await downloadFromUrl(pdfUrl, destPath, cookieStr);
+
+            existing.add(filename);  // mark as downloaded
+            stats.downloaded++;
+
+            // Short settle delay — no page reload needed since we download directly
+            await sleep(DELAY_MS);
+
+          } catch (dlErr) {
+            console.log(`  ❌ Download failed: ${dlErr.message}`);
+            stats.errors++;
+            // Clean up incomplete file if it exists
+            const destPath = path.join(DOCS_DIR, filename);
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
           }
         }
       }
