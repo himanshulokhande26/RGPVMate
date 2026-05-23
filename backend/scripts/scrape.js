@@ -201,8 +201,20 @@ const BRANCH_RULES = [
   [/pharmacology/i,                                              'PHARMD'],
   [/pharmaceutics/i,                                             'PHARMD'],
 
-  // ── Generic catch-all (program-level docs with no sub-branch) ────
-  // e.g. "Master in Business Administration Syllabus" → GENERAL
+  // ── M.Pharm specialisations (‘MPharm PCI …’ titles) ────────
+  // Must come AFTER pharmaceutical\s+management (MBA) to avoid false match.
+  [/pharmacy\s+practice/i,                                       'PHRMPRAC'],
+  [/pharmacognosy/i,                                             'PHRMCOG'],
+  [/pharmaceutical\s+quality|quality\s+assurance/i,             'PHRMQA'],
+  [/regulatory\s+affairs/i,                                     'PHRMREG'],
+  [/pharmaceutical\s+chem(?:istry)?/i,                          'PHRMCHEM'],
+  [/pharmaceutics/i,                                             'PHARMD'],
+  [/pharmacology/i,                                              'PHARMD'],
+
+  // ── MCA / MBA catch-alls (program-level, no sub-branch) ─────
+  [/m\.?c\.?a\.?(?:\s*\(|$|\s)/i,                                'GENERAL'],  // "M.C.A. I sem", "MCA (Grading Sys.)"
+  [/mca\s+dual\s+degree/i,                                       'GENERAL'],
+  [/master\s+of\s+applied\s+management/i,                        'MAM'],  // MBA Integrated
   [/master\s+in\s+business\s+administration|master\s+of\s+business/i, 'GENERAL'],
   [/master\s+of\s+computer\s+application|master\s+in\s+computer/i,   'GENERAL'],
   [/bachelor\s+of\s+computer\s+application/i,                         'GENERAL'],
@@ -357,13 +369,9 @@ async function scrape() {
 
         console.log(`\n  🔧 System Type: ${sys.text} (${sysToken})`);
 
-        // Select system type (re-query every time — postback replaces DOM)
-        const latestSelects = await page.$$('select');
-        if (!latestSelects[2]) {
-          console.log(`  ⚠️  System type dropdown missing after postback`);
-          continue;
-        }
-        await latestSelects[2].selectOption({ value: sys.value });
+        // Select system type using page.locator() — lazily resolves the element
+        // every time it is interacted with, so it never goes stale after a postback.
+        await page.locator('select').nth(2).selectOption({ value: sys.value });
         await page.waitForLoadState('networkidle');
         await sleep(DELAY_MS);
         if (DEBUG) await page.screenshot({ path: path.join(DOCS_DIR, `_debug_${programToken}_${sysToken}.png`) });
