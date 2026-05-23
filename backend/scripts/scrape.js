@@ -522,25 +522,39 @@ async function scrape() {
           }
 
           // ── Download the PDF ────────────────────────────────────────────────
-          try {
-            const destPath = path.join(DOCS_DIR, filename);
+          const maxRetries = 3;
+          let success = false;
 
-            const [download] = await Promise.all([
-              page.waitForEvent('download', { timeout: 15000 }),
-              downloadBtn.click(),
-            ]);
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              const destPath = path.join(DOCS_DIR, filename);
 
-            await download.saveAs(destPath);
-            existing.add(filename);  // mark as downloaded for this run
-            stats.downloaded++;
+              const [download] = await Promise.all([
+                page.waitForEvent('download', { timeout: 60000 }), // 60 seconds timeout
+                downloadBtn.click(),
+              ]);
 
-            // Wait for page to settle after download postback
-            await page.waitForLoadState('networkidle').catch(() => {});
-            await sleep(DELAY_MS);
+              await download.saveAs(destPath);
+              existing.add(filename);  // mark as downloaded for this run
+              stats.downloaded++;
+              success = true;
 
-          } catch (dlErr) {
-            console.log(`  ❌ Download failed: ${dlErr.message}`);
-            stats.errors++;
+              // Wait for page to settle after download postback
+              await page.waitForLoadState('networkidle').catch(() => {});
+              await sleep(DELAY_MS);
+              break; // exit retry loop on success
+
+            } catch (dlErr) {
+              console.log(`  ⚠️  Download attempt ${attempt}/${maxRetries} failed: ${dlErr.message}`);
+              if (attempt < maxRetries) {
+                const backoff = attempt * 3000;
+                console.log(`      Retrying in ${backoff / 1000}s...`);
+                await sleep(backoff);
+              } else {
+                console.log(`  ❌ Download failed after ${maxRetries} attempts.`);
+                stats.errors++;
+              }
+            }
           }
         }
       }
