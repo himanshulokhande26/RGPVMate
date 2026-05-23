@@ -434,14 +434,14 @@ async function scrape() {
         // Target the specific ASP.NET GridView by its rendered ID.
         // ASP.NET WebForms renders ContentPlaceHolder1$gvViewAct as:
         //   ContentPlaceHolder1_gvViewAct
-        const gridSelector  = '#ContentPlaceHolder1_gvViewAct tr, #ctl00_ContentPlaceHolder1_gvViewAct tr';
-        const tableRows     = await page.$$(gridSelector);
+        let rowSelector  = '#ContentPlaceHolder1_gvViewAct tr, #ctl00_ContentPlaceHolder1_gvViewAct tr';
+        let rowCount     = await page.locator(rowSelector).count();
 
-        if (tableRows.length === 0) {
+        if (rowCount === 0) {
           // Fallback: scan all table rows if the specific ID isn't found
           console.log(`  ℹ️  GridView not found by ID, falling back to all table rows`);
-          const allRows = await page.$$('table tr');
-          tableRows.push(...allRows);
+          rowSelector = 'table tr';
+          rowCount     = await page.locator(rowSelector).count();
         }
 
         let currentSemester = null;
@@ -449,7 +449,8 @@ async function scrape() {
         // RGPV's GridView sometimes renders a row twice (header row + data row).
         const seenInBatch = new Set();
 
-        for (const row of tableRows) {
+        for (let i = 0; i < rowCount; i++) {
+          const row = page.locator(rowSelector).nth(i);
           const rowText = (await row.innerText()).trim();
           if (!rowText) continue;
 
@@ -461,12 +462,17 @@ async function scrape() {
           }
 
           // Check if this row has a download link/button (has a PDF download target)
-          const downloadBtn = await row.$('a[href], input[type="submit"], button');
-          if (!downloadBtn || currentSemester === null) continue;
+          const downloadBtn = row.locator('a[href], input[type="submit"], button').first();
+          const hasDownloadBtn = (await downloadBtn.count()) > 0;
+          if (!hasDownloadBtn || currentSemester === null) continue;
 
           // Get the document display title
-          const titleEl = await row.$('td:last-child') || await row.$('td');
-          const title   = titleEl ? (await titleEl.innerText()).trim() : rowText;
+          let titleEl = row.locator('td:last-child').first();
+          if ((await titleEl.count()) === 0) {
+            titleEl = row.locator('td').first();
+          }
+          const hasTitleEl = (await titleEl.count()) > 0;
+          const title   = hasTitleEl ? (await titleEl.innerText()).trim() : rowText;
 
           if (!title || title.toLowerCase().includes('semester')) continue;
 
