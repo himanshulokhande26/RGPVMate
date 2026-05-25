@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   picture:   { type: String },           // Google profile photo URL
   branch:    { type: String, default: 'CSE' }, // student preference
   semester:  { type: Number, default: 1, min: 1, max: 8 },
+  systemType: { type: String }, // e.g. CBCS, CBGS, GRADING
   createdAt: { type: Date, default: Date.now },
   // NEVER store: password, Google access token, sensitive data
 });

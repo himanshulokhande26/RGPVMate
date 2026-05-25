@@ -3,15 +3,21 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-const chatRoutes = require('./routes/chat');
-const authRoutes = require('./routes/auth');
+const chatRoutes    = require('./routes/chat');
+const authRoutes    = require('./routes/auth');
 const historyRoutes = require('./routes/history');
-const adminRoutes = require('./routes/admin');
+const adminRoutes   = require('./routes/admin');
+const noticesRoutes = require('./routes/notices');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,10 +40,11 @@ app.get('/health', (req, res) => {
 });
 
 // ── API Routes ────────────────────────────────────────────────
-app.use('/api/chat', chatRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/chat',    chatRoutes);
+app.use('/api/auth',    authRoutes);
 app.use('/api/history', historyRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin',   adminRoutes);
+app.use('/api/notices', noticesRoutes);
 
 // ── 404 Handler ───────────────────────────────────────────────
 app.use((req, res) => {
@@ -46,7 +53,7 @@ app.use((req, res) => {
 
 // ── Global Error Handler ──────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('[ERROR]', err.message);
+  console.error('[ERROR]', err);
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
   });
