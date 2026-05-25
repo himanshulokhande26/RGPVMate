@@ -12,6 +12,7 @@ const COLLECTION_NAME = 'rgpvmate_docs';
 const qdrant = new QdrantClient({
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
+  port: process.env.QDRANT_URL.startsWith('https') ? 443 : undefined,
 });
 
 /**
@@ -82,6 +83,55 @@ async function addChunks(chunks) {
 }
 
 /**
+ * Normalises common branch abbreviations and variations to the official RGPV names stored in Qdrant.
+ */
+function normalizeBranch(branchInput) {
+  if (!branchInput) return null;
+  const clean = branchInput.toLowerCase().trim().replace(/\s+/g, ' ');
+
+  // Direct Abbreviations / Short Synonyms
+  if (clean === 'cse' || clean === 'cs' || clean === 'computer science' || clean.includes('computer science and engineering') || clean.includes('computer science engineering')) {
+    return 'Computer Science Engineering';
+  }
+  if (clean === 'it' || clean.includes('information technology') || clean.includes('information tech')) {
+    return 'Information Technology';
+  }
+  if (clean === 'ec' || clean.includes('electronics & communication') || clean.includes('electronics and communication') || clean.includes('electronics and communication engineering')) {
+    return 'Electronics and Communication Engineering';
+  }
+  if (clean === 'ee' || clean.includes('electrical engineering')) {
+    return 'Electrical Engineering';
+  }
+  if (clean === 'eee' || clean.includes('electrical and electronics')) {
+    return 'Electrical and Electronics Engineering';
+  }
+  if (clean === 'me' || clean.includes('mechanical engineering')) {
+    return 'Mechanical Engineering';
+  }
+  if (clean === 'ce' || clean.includes('civil engineering')) {
+    return 'Civil Engineering';
+  }
+  if (clean === 'vlsi' || clean.includes('vlsi design')) {
+    return 'Electronics Engineering VLSI Design and Technology';
+  }
+  if (clean === 'aiml' || clean.includes('machine learning')) {
+    return 'AI and Machine Learning';
+  }
+  if (clean === 'aids' || clean.includes('data science')) {
+    return 'AI and Data Science';
+  }
+  if (clean === 'common') {
+    return 'Common to All Branches';
+  }
+
+  // Capitalize first letters of each word as a fallback to match DB casing
+  return branchInput
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
  * Searches Qdrant Cloud for the top-K most semantically similar chunks.
  * @param {number[]} queryVector — embedded query
  * @param {object} filters — optional metadata filters e.g. { semester: 5 }
@@ -95,16 +145,42 @@ async function searchChunks(queryVector, filters = {}, topK = 4) {
     must: []
   };
 
-  if (filters.semester) {
+  // ── Pre-process filters ─────────────────────────────────────
+  let targetBranch = filters.branch;
+  let targetSystemType = filters.systemType;
+  const sem = filters.semester ? Number(filters.semester) : undefined;
+
+  // 1. 1st-Year Common Branch Override
+  // First-year students (sem 1 & 2) share the same core syllabus, which RGPV publishes under "COMMON"
+  if (sem === 1 || sem === 2) {
+    targetBranch = 'Common to All Branches';
+  }
+
+  // 2. Lateral Entry Bypass
+  // Lateral entry students enter in Sem 3. For Semesters 4-8, they sit in the same classrooms
+  // and study the exact same B.Tech syllabus. RGPV doesn't publish separate "Lateral" PDFs for Sem 4-8.
+  if (targetSystemType === 'LATERALENTRY' && sem >= 4) {
+    targetSystemType = undefined; // Bypass filter so it queries standard B.Tech/B.E. schemes
+  }
+
+  // ── Build Qdrant filters ────────────────────────────────────
+  if (sem) {
     filter.must.push({
       key: 'semester',
-      match: { value: filters.semester }
+      match: { value: sem }
     });
   }
-  if (filters.branch) {
+  if (targetBranch) {
+    const normalizedBranch = normalizeBranch(targetBranch);
     filter.must.push({
       key: 'branch',
-      match: { value: filters.branch }
+      match: { value: normalizedBranch }
+    });
+  }
+  if (targetSystemType) {
+    filter.must.push({
+      key: 'systemType',
+      match: { value: targetSystemType }
     });
   }
   if (filters.type) {

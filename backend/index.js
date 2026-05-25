@@ -3,6 +3,11 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -46,7 +51,7 @@ app.use((req, res) => {
 
 // ── Global Error Handler ──────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('[ERROR]', err.message);
+  console.error('[ERROR]', err);
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
   });
