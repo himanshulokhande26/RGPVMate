@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import base64
+import gc
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sentence_transformers import SentenceTransformer
@@ -216,47 +217,68 @@ def extract_text():
     else:
         full_text = ""
 
+    disable_ocr = data.get('disable_ocr', False)
+    is_text_pdf = len(full_text.strip()) >= 10
+
     # ── Step 2: OCR fallback for scanned PDFs ────────────────
-    # Trigger OCR if extracted text is too short (< 50 chars = likely scanned)
-    if len(full_text) < 50:
-        if not OCR_AVAILABLE:
+    # Trigger OCR if extracted text is too short (likely scanned) and OCR is not disabled.
+    if not is_text_pdf:
+        if disable_ocr:
+            method = "none"
+        elif not OCR_AVAILABLE:
             print("[WARN] Scanned PDF detected but OCR not installed.", file=sys.stderr)
             return jsonify({
-                "text": "",
+                "text": full_text,
                 "method": "none",
                 "pages": num_pages,
-                "length": 0,
+                "length": len(full_text),
                 "warning": (
                     "Scanned PDF detected but OCR is not installed. "
                     "To enable OCR: pip install pytesseract pdf2image Pillow "
                     "and install Tesseract from https://github.com/UB-Mannheim/tesseract/wiki"
                 )
             }), 200
+        else:
+            try:
+                print(f"[INFO] Scanned PDF detected — running OCR ({num_pages} pages)...")
+                start = time.time()
 
-        try:
-            print(f"[INFO] Scanned PDF detected — running OCR ({num_pages} pages)...")
-            start = time.time()
+                ocr_parts = []
+                for i in range(num_pages):
+                    # Convert only one page at a time to minimize memory consumption
+                    page_images = convert_from_bytes(
+                        pdf_bytes,
+                        dpi=200,
+                        first_page=i+1,
+                        last_page=i+1,
+                        poppler_path=POPPLER_PATH
+                    )
+                    if page_images:
+                        img = page_images[0]
+                        page_text = pytesseract.image_to_string(img, lang='eng')
+                        ocr_parts.append(page_text)
+                        # Release image memory immediately
+                        img.close()
+                        del img
+                        del page_images
+                    print(f"[INFO]   OCR page {i+1}/{num_pages} done")
 
-            # Convert PDF pages to images (200 DPI gives good OCR accuracy)
-            images = convert_from_bytes(pdf_bytes, dpi=200, poppler_path=POPPLER_PATH)
-            num_pages = len(images)
+                full_text = "\n".join(ocr_parts).strip()
+                elapsed = time.time() - start
+                print(f"[INFO] OCR complete in {elapsed:.1f}s — {len(full_text)} chars extracted")
+                method = "ocr"
 
-            ocr_parts = []
-            for i, img in enumerate(images):
-                page_text = pytesseract.image_to_string(img, lang='eng')
-                ocr_parts.append(page_text)
-                print(f"[INFO]   OCR page {i+1}/{num_pages} done")
-
-            full_text = "\n".join(ocr_parts).strip()
-            elapsed = time.time() - start
-            print(f"[INFO] OCR complete in {elapsed:.1f}s — {len(full_text)} chars extracted")
-            method = "ocr"
-
-        except Exception as e:
-            print(f"[ERROR] OCR failed: {e}", file=sys.stderr)
-            return jsonify({"error": f"OCR processing failed: {e}"}), 500
+            except Exception as e:
+                print(f"[ERROR] OCR failed: {e}", file=sys.stderr)
+                return jsonify({"error": f"OCR processing failed: {e}"}), 500
     else:
         method = "text"
+
+    # Free memory buffers before responding
+    del pdf_bytes
+    if data and 'pdf_b64' in data:
+        data['pdf_b64'] = None
+    gc.collect()
 
     return jsonify({
         "text":   full_text,
