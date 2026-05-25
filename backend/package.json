@@ -11,7 +11,12 @@
     "scrape:dry": "node scripts/scrape.js --dry-run",
     "scrape:debug": "node scripts/scrape.js --dry-run --debug --program MBA",
     "scrape:schemes": "node scripts/scrape_schemes.js",
-    "scrape:schemes:dry": "node scripts/scrape_schemes.js --dry-run"
+    "scrape:schemes:dry": "node scripts/scrape_schemes.js --dry-run",
+    "scrape:notices": "node scripts/scrape_notices.js",
+    "scrape:notices:dry": "node scripts/scrape_notices.js --dry-run",
+    "scrape:notices:force": "node scripts/scrape_notices.js --force",
+    "notices:schedule": "node scripts/schedule_notices.js",
+    "notices:schedule:now": "node scripts/schedule_notices.js --run-now"
   },
   "keywords": [
     "rgpv",
@@ -34,6 +39,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.14.1",
     "multer": "^1.4.5-lts.2",
+    "node-cron": "^3.0.3",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdf-parse": "^1.1.1"

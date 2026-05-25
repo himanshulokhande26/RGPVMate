@@ -15,6 +15,9 @@ const User = require('../models/User');
 function sanitizeAnswer(text) {
   return (text || '')
     .replace(/^[ \t]*\*{0,2}sources?\*{0,2}:[^\n]*/gim, '')
+    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, '')
+    .replace(/<script>/gi, '')
+    .replace(/<\/script>/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -23,13 +26,17 @@ function sanitizeAnswer(text) {
 
 function isGreeting(text) {
   const clean = text.toLowerCase().trim().replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, '').replace(/\s+/g, ' ');
-  const singleWord = /^(hi+|hello+|hey+|yo+|helo+|sup+|greetings+|namaste|heyy+|hii+|wassup+|whatsapp+|hola+|aloha+|salaam+)$/i;
+  // Guard: if more than 6 words, it's a compound query — never a pure greeting
+  if (clean.split(' ').length > 6) return false;
+  const singleWord = /^(hi+|hello+|hey+|yo+|helo+|sup+|greetings+|namaste|heyy+|hii+|wassup+|whatsapp+|hola+|aloha+|salaam+|kaise\s*ho|kaise\s*hai|kaisa\s*hai)$/i;
   const multiWord = [
     'good morning', 'good afternoon', 'good evening', 'good night',
     'hey there', 'hello mate', 'hello buddy', 'hi bro', 'hey bro', 'heyy bro', 'hello bro',
-    'hi mate', 'hey mate', 'yo bro', 'yo mate', 'sup bro', 'sup mate', 'hii bro', 'hey buddy'
+    'hi mate', 'hey mate', 'yo bro', 'yo mate', 'sup bro', 'sup mate', 'hii bro', 'hey buddy',
+    'kaise ho', 'kaise hai', 'kaisa hai', 'kya haal', 'kya haal hai', 'hows it going'
   ];
-  return singleWord.test(clean) || multiWord.includes(clean) || /^(hi|hey|hello|yo)\s+(bro|buddy|mate|friend|yaar|there)$/i.test(clean);
+  const hinges = /^(kaise\s*ho|kaise\s*hai|kaisa\s*hai|kya\s*haal|kya\s*haal\s*hai)\s*(yaar|bhai|bro|buddy|mate|dost)?$/i;
+  return singleWord.test(clean) || multiWord.includes(clean) || hinges.test(clean) || /^(hi|hey|hello|yo)\s+(bro|buddy|mate|friend|yaar|there)$/i.test(clean);
 }
 
 function isSelfIntroQuery(text) {
@@ -38,12 +45,30 @@ function isSelfIntroQuery(text) {
 
 function isSystemQuery(text) {
   const t = text.toLowerCase().trim();
+  const hasArchitecture = /architect|archit|acrhit|archic/i.test(t);
+  const hasSystem = /\b(system|backend|tech|database|vector|qdrant|stack|model|api|key|credentials|secret)\b/i.test(t);
+
+  // Specific key queries that look for RGPVMate's internal keys
+  const isInternalKeyQuery = 
+    /\b(your|this|using|used|groq|gemini|system|secret)\s+(api\s*key|token|key\b)/i.test(t) ||
+    /\b(api\s*key|token|key\b).*\b(your|this|using|used|groq|gemini|system|secret)\b/i.test(t) ||
+    /^(show|give|tell|reveal)\s+(me\s+)?(the\s+)?(api\s*)?key/i.test(t);
+
+  // CRITICAL FIX: "which model/llm/ai" must be about RGPVMate itself, not academic topics.
+  const isModelQuery =
+    /\b(what|which)\s+(model|llm)\b/i.test(t) ||
+    /\b(what|which)\s+ai\s+(model|engine|are\s+you|do\s+you)\b/i.test(t) ||
+    /\byou\s+(use|run|using|running)\s+(model|llm|ai|api)\b/i.test(t);
+
   return (
-    /\b(what|which)\s+(model|llm|ai|algorithm|engine|api)\b/i.test(t) ||
-    /\b(system|backend|tech|software|database|vector|qdrant)\s+(architecture|stack|details|specifications)\b/i.test(t) ||
+    (hasSystem && hasArchitecture) ||
+    isInternalKeyQuery ||
+    isModelQuery ||
+    /\b(system|backend|tech|software|database|vector|qdrant)\s+(stack|details|specifications)\b/i.test(t) ||
     /\b(how|on\s+what)\s+(principle|mechanism)\s+(you|do\s+you)\s+work\b/i.test(t) ||
+    /\bhow\s+(do\s+you|you)\s+work\b/i.test(t) ||
     /\b(who|which\s+company)\s+(created|built|designed|developed|programmed|coder)\s+you\b/i.test(t) ||
-    /\b(your|tell\s+me\s+your)\s+(architecture|stack|technology|model|backend)\b/i.test(t)
+    /\b(your|tell\s+me\s+your)\s+(stack|technology|model|backend)\b/i.test(t)
   );
 }
 
@@ -85,8 +110,9 @@ router.post('/', optionalAuth, async (req, res, next) => {
     }
 
     if (isSystemQuery(q)) {
+      const activeModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
       return res.json({
-        answer: "Bro!! That's a bit personal, can't tell you all my secrets! 😉 But I'm built using Node.js, Express, Qdrant, and Groq (running the high-quality **llama-3.3-70b-versatile** model) to help you crack those exams. Ask me about your subjects, syllabus, or notes instead! 📚",
+        answer: `Bro!! That's a bit personal, can't tell you all my secrets! 😉 But I'm built using Node.js, Express, Qdrant, and Groq (running **${activeModel}**) to help you crack those exams. Ask me about your subjects, syllabus, or notes instead! 📚`,
         sources: [], elapsedSeconds: 0,
       });
     }
@@ -193,27 +219,97 @@ router.post('/', optionalAuth, async (req, res, next) => {
 
     // ── Step 1: Embed condensed question ─────────────────────────────────────
     const isBroadQuery = qLower.includes('syllabus') || qLower.includes('subjects') || qLower.includes('courses');
-    const topK = isBroadQuery ? 10 : 4;
+    const isPyqQuery = qLower.includes('pyq') || qLower.includes('previous year') || qLower.includes('old paper') || qLower.includes('question paper') || qLower.includes('exam paper');
+    const isNoticeQuery = /\b(notice|notices|announcement|announcements|circular|circulars|notification|notifications|latest\s+update|new\s+update)\b/i.test(qLower);
+    const topK = isPyqQuery ? 12 : (isBroadQuery || isNoticeQuery ? 5 : 4);
+    const searchLimit = isPyqQuery ? 30 : topK;
+
+    // Extract subject keywords & codes for PYQ chunk re-ranking
+    let queryNumber = null;
+    let queryKeywords = [];
+    if (isPyqQuery) {
+      const numberMatch = condensedQuestion.match(/\b\d{3,4}\b/);
+      queryNumber = numberMatch ? numberMatch[0] : null;
+
+      const stopWords = new Set([
+        'what', 'give', 'list', 'rank', 'pyq', 'pyqs', 'question', 'questions', 'paper', 'papers',
+        'semester', 'sem', 'subject', 'subjects', 'order', 'frequency', 'top', 'first',
+        'the', 'and', 'for', 'this', 'that', 'with', 'about', 'how', 'why', 'can', 'you', 'please',
+        'arranged', 'arrange', 'sorted', 'sort', 'most', 'asked', 'least', 'showing', 'show',
+        'display', 'displaying', 'priority', 'based', 'from', 'chunks', 'of', 'in', 'your'
+      ]);
+      queryKeywords = condensedQuestion.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !stopWords.has(w) && isNaN(w));
+      console.log('🔑 [chat] Extracted PYQ search keywords:', queryKeywords, 'number:', queryNumber);
+    }
 
     console.log('\uD83D\uDD04 [chat] Fetching embedding...');
     const vector = await getEmbedding(condensedQuestion);
 
     // ── Step 2: Retrieve chunks from Qdrant ───────────────────────────────────
     const filters = {};
-    if (activeSemester)   filters.semester   = activeSemester;
-    if (activeBranch)     filters.branch     = activeBranch;
-    if (activeSystemType) filters.systemType = activeSystemType;
+    if (isNoticeQuery) {
+      filters.type = 'notice';
+    } else if (isPyqQuery) {
+      filters.type = 'pyq';
+      if (activeBranch) filters.branch = activeBranch;
+    } else {
+      if (activeSemester)   filters.semester   = activeSemester;
+      if (activeBranch)     filters.branch     = activeBranch;
+      if (activeSystemType) filters.systemType = activeSystemType;
+    }
 
     console.log('\uD83D\uDD04 [chat] Querying Qdrant...');
-    let chunks = await searchChunks(vector, filters, topK);
+    let chunks = await searchChunks(vector, filters, searchLimit);
     console.log('\uD83D\uDD04 [chat] Retrieved ' + chunks.length + ' chunks');
 
     // Self-healing: retry without branch/semester if empty
-    if (chunks.length === 0 && (filters.branch || filters.semester)) {
+    if (chunks.length === 0 && (filters.branch || filters.semester || filters.type)) {
       console.log('\u26A0\uFE0F [chat] 0 results with filters. Retrying broad search...');
-      const fallbackFilters = filters.systemType ? { systemType: filters.systemType } : {};
-      chunks = await searchChunks(vector, fallbackFilters, topK);
+      let fallbackFilters = {};
+      if (isNoticeQuery) {
+        fallbackFilters = { type: 'notice' };
+      } else if (isPyqQuery) {
+        fallbackFilters = { type: 'pyq' };
+      } else if (filters.systemType) {
+        fallbackFilters = { systemType: filters.systemType };
+      }
+      chunks = await searchChunks(vector, fallbackFilters, searchLimit);
       console.log('\uD83D\uDD04 [chat] Broad search: ' + chunks.length + ' chunks');
+    }
+
+    // ── Step 2.5: Re-rank PYQ chunks using keyword-matching scores ───────────
+    if (isPyqQuery && chunks.length > 0) {
+      console.log('🔄 [chat] Re-ranking ' + chunks.length + ' PYQ chunks based on keywords...');
+      const scoredChunks = chunks.map(chunk => {
+        let score = chunk.distance ? (1 - chunk.distance) : 0.5; // Cosine similarity
+        const sourceLower = (chunk.metadata.source || '').toLowerCase();
+
+        // 1. Subject code match bonus
+        if (queryNumber && sourceLower.includes(queryNumber)) {
+          score += 2.0;
+        }
+
+        // 2. Keyword matches bonus
+        let keywordMatches = 0;
+        queryKeywords.forEach(kw => {
+          if (sourceLower.includes(kw)) {
+            keywordMatches++;
+          }
+        });
+        score += keywordMatches * 0.5;
+
+        return { chunk, score };
+      });
+
+      // Sort descending by score
+      scoredChunks.sort((a, b) => b.score - a.score);
+
+      // Slice to topK (15)
+      chunks = scoredChunks.slice(0, topK).map(sc => sc.chunk);
+      console.log('🎯 [chat] Re-ranked top 3 sources:', chunks.slice(0, 3).map(c => c.metadata.source));
     }
 
     // ── Step 3: Generate answer via Groq ─────────────────────────────────────
@@ -221,8 +317,18 @@ router.post('/', optionalAuth, async (req, res, next) => {
     const { answer, sources } = await generateAnswer(condensedQuestion, chunks);
     console.log('\uD83D\uDD04 [chat] Answer length=' + answer.length + ', sources=' + sources.length);
 
-    // ── Step 4: Save to cache (fire-and-forget, skip "no info" answers) ───────
-    const isDontKnow = answer.toLowerCase().includes("i don't have that") || answer.includes('I do not have that information');
+    // ── Step 4: Save to cache (fire-and-forget, skip denial/"no info" answers) ──
+    // Synced with isDenial patterns in llm.js to prevent caching any denial variant
+    const isDontKnow =
+      /i don't have/i.test(answer) ||
+      /i do not have/i.test(answer) ||
+      /not found/i.test(answer) ||
+      /cannot find/i.test(answer) ||
+      /could not find/i.test(answer) ||
+      /nahi rakh sakta/i.test(answer) ||
+      /nahi bata sakta/i.test(answer) ||
+      /details nahi/i.test(answer) ||
+      /pata nahi/i.test(answer);
     if (answer && !isDontKnow) {
       setCached(q, answer, sources).catch(() => {});
     }
@@ -244,6 +350,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
     res.json({ answer: sanitizeAnswer(answer), sources, elapsedSeconds });
 
   } catch (err) {
+    console.error('💥 [chat] Error caught in route:', err);
     // Friendly 429 handler
     if (err.status === 429 || (err.message && err.message.includes('429'))) {
       return res.status(429).json({

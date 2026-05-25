@@ -13,10 +13,11 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-const chatRoutes = require('./routes/chat');
-const authRoutes = require('./routes/auth');
+const chatRoutes    = require('./routes/chat');
+const authRoutes    = require('./routes/auth');
 const historyRoutes = require('./routes/history');
-const adminRoutes = require('./routes/admin');
+const adminRoutes   = require('./routes/admin');
+const noticesRoutes = require('./routes/notices');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,10 +40,11 @@ app.get('/health', (req, res) => {
 });
 
 // ── API Routes ────────────────────────────────────────────────
-app.use('/api/chat', chatRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/chat',    chatRoutes);
+app.use('/api/auth',    authRoutes);
 app.use('/api/history', historyRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin',   adminRoutes);
+app.use('/api/notices', noticesRoutes);
 
 // ── 404 Handler ───────────────────────────────────────────────
 app.use((req, res) => {
