@@ -3,3 +3,13 @@ sentence-transformers
 torch
 flask-cors
 gunicorn
+
+# PDF text extraction (much better than pdf-parse for text-based PDFs)
+pymupdf
+
+# OCR for scanned PDFs (optional — gracefully degrades if not installed)
+# Requires Tesseract binary: https://github.com/UB-Mannheim/tesseract/wiki
+# Requires Poppler for Windows: https://github.com/oschwartz10612/poppler-windows/releases
+pytesseract
+pdf2image
+Pillow

@@ -2,14 +2,16 @@
 // Run with: npm run ingest
 // Loads all PDFs from the /documents folder into ChromaDB.
 // Safe to re-run — skips files already ingested (checks by source name).
+// Text extraction is delegated to the Python embedder service (/extract-text)
+// which uses PyMuPDF for text PDFs and Tesseract OCR for scanned PDFs.
 'use strict';
 
 require('dotenv').config();
 const fs    = require('fs');
 const path  = require('path');
-const pdf   = require('pdf-parse');
+const axios = require('axios');
 const { chunkDocument }       = require('../services/chunker');
-const { getEmbedding, addChunks, listDocuments } = require('../services/retriever');
+const { addChunks, listDocuments } = require('../services/retriever');
 
 // ── Config ────────────────────────────────────────────────────
 const DOCS_ROOT = path.join(__dirname, '../../documents');
@@ -18,7 +20,7 @@ const DOCS_ROOT = path.join(__dirname, '../../documents');
 const FOLDER_TYPE_MAP = {
   syllabus: 'syllabus',
   scheme:   'scheme',
-  pyq:      'pyq',
+  pyqs:     'pyq',
   rules:    'rules',
   calendar: 'calendar',
   fees:     'fees',
@@ -236,13 +238,16 @@ async function ingest() {
       process.stdout.write(`   📄 ${filename} ... `);
 
       try {
-        // 1. Extract raw text from PDF
-        const buffer = fs.readFileSync(filePath);
-        const parsed = await pdf(buffer);
-        const rawText = parsed.text;
+        // 1. Extract raw text via Python embedder service (PyMuPDF + OCR fallback)
+        const { text: rawText, method } = await extractTextFromPDF(filePath);
+        process.stdout.write(`[${method}] `);
 
         if (!rawText || rawText.trim().length < 50) {
-          console.log('⚠️  Too little text extracted, skipping');
+          if (method === 'none') {
+            console.log('⚠️  Scanned PDF — OCR not installed in embedder, skipping');
+          } else {
+            console.log('⚠️  Too little text extracted, skipping');
+          }
           continue;
         }
 
@@ -290,6 +295,34 @@ async function ingest() {
   console.log(`   Files skipped  : ${skipped}`);
   console.log(`   Total chunks   : ${totalChunks}`);
   console.log('══════════════════════════════════════════════');
+}
+
+/**
+ * Sends a PDF file to the Python embedder's /extract-text endpoint.
+ * The embedder tries PyMuPDF first, then falls back to Tesseract OCR
+ * for scanned PDFs.
+ *
+ * @param {string} filePath — absolute path to the PDF file
+ * @returns {{ text: string, method: 'text'|'ocr'|'none', pages: number }}
+ */
+async function extractTextFromPDF(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const pdf_b64 = buffer.toString('base64');
+
+  try {
+    const response = await axios.post(
+      `${process.env.EMBEDDER_URL}/extract-text`,
+      { pdf_b64 },
+      { timeout: 300_000 }  // 5 min — OCR on large docs can take a while
+    );
+    return {
+      text:   response.data.text   || '',
+      method: response.data.method || 'unknown',
+      pages:  response.data.pages  || 0,
+    };
+  } catch (err) {
+    throw new Error(`Text extraction failed for ${path.basename(filePath)}: ${err.message}`);
+  }
 }
 
 /**
