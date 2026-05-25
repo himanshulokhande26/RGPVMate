@@ -51,6 +51,7 @@ desktop.ini
 # (PDFs are large and shouldn't be version-controlled)
 documents/**/*.pdf
 backend/documents/tmp/
+documents/
 
 # ── ChromaDB local data ───────────────────
 chroma_data/

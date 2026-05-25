@@ -2,14 +2,16 @@
 // Run with: npm run ingest
 // Loads all PDFs from the /documents folder into ChromaDB.
 // Safe to re-run — skips files already ingested (checks by source name).
+// Text extraction is delegated to the Python embedder service (/extract-text)
+// which uses PyMuPDF for text PDFs and Tesseract OCR for scanned PDFs.
 'use strict';
 
 require('dotenv').config();
 const fs    = require('fs');
 const path  = require('path');
-const pdf   = require('pdf-parse');
+const axios = require('axios');
 const { chunkDocument }       = require('../services/chunker');
-const { getEmbedding, addChunks, listDocuments } = require('../services/retriever');
+const { addChunks, listDocuments, deleteChunksBySource } = require('../services/retriever');
 
 // ── Config ────────────────────────────────────────────────────
 const DOCS_ROOT = path.join(__dirname, '../../documents');
@@ -18,7 +20,7 @@ const DOCS_ROOT = path.join(__dirname, '../../documents');
 const FOLDER_TYPE_MAP = {
   syllabus: 'syllabus',
   scheme:   'scheme',
-  pyq:      'pyq',
+  pyqs:     'pyq',
   rules:    'rules',
   calendar: 'calendar',
   fees:     'fees',
@@ -182,24 +184,53 @@ function parseFilenameMetadata(filename) {
 
 // ── Main ──────────────────────────────────────────────────────
 
+const CHECKPOINT_PATH = path.join(__dirname, '../ingest_checkpoint.json');
+const disableOcr = process.argv.includes('--no-ocr') || process.argv.includes('--disable-ocr');
+
 async function ingest() {
   console.log('══════════════════════════════════════════════');
   console.log(' RGPVMate — Document Ingestion Script');
   console.log('══════════════════════════════════════════════\n');
+  if (disableOcr) {
+    console.log('🚫 OCR fallback is disabled for this ingestion run.\n');
+  }
 
   // Get already-ingested sources so we can skip them
   let alreadyIngested = new Set();
   try {
     const existing = await listDocuments();
     alreadyIngested = new Set(existing.map(d => d.source));
-    console.log(`📋 Already in ChromaDB: ${alreadyIngested.size} document(s)`);
-    if (alreadyIngested.size > 0) {
-      console.log([...alreadyIngested].map(s => `   • ${s}`).join('\n'));
-    }
-    console.log();
+    console.log(`📋 Already in ChromaDB: ${alreadyIngested.size} document(s)\n`);
   } catch (err) {
-    console.warn('⚠️  Could not reach ChromaDB to check existing docs. Will ingest all.\n');
+    console.warn('⚠️  Could not reach ChromaDB to check existing docs.\n');
   }
+
+  // Load checkpoint
+  let checkpoint = { completed: [] };
+  if (fs.existsSync(CHECKPOINT_PATH)) {
+    try {
+      checkpoint = JSON.parse(fs.readFileSync(CHECKPOINT_PATH, 'utf8'));
+    } catch (err) {
+      console.warn('⚠️  Could not read checkpoint file, starting fresh.\n');
+    }
+  }
+
+  // Bootstrap checkpoint file if it doesn't exist but we already have ingested documents
+  if (!fs.existsSync(CHECKPOINT_PATH) && alreadyIngested.size > 0) {
+    checkpoint.completed = Array.from(alreadyIngested);
+    try {
+      fs.writeFileSync(CHECKPOINT_PATH, JSON.stringify(checkpoint, null, 2), 'utf8');
+      console.log(`📝 Bootstrapped checkpoint file with ${alreadyIngested.size} already ingested documents.`);
+    } catch (err) {
+      console.warn('⚠️  Could not bootstrap checkpoint file:', err.message);
+    }
+  }
+
+  const checkpointSet = new Set(checkpoint.completed || []);
+  const completedFiles = new Set([
+    ...alreadyIngested,
+    ...checkpointSet
+  ]);
 
   let totalFiles = 0;
   let totalChunks = 0;
@@ -227,7 +258,7 @@ async function ingest() {
       const filePath = path.join(folderPath, filename);
 
       // Skip if already ingested
-      if (alreadyIngested.has(filename)) {
+      if (completedFiles.has(filename)) {
         console.log(`   ⏭️  Skipping (already ingested): ${filename}`);
         skipped++;
         continue;
@@ -236,13 +267,23 @@ async function ingest() {
       process.stdout.write(`   📄 ${filename} ... `);
 
       try {
-        // 1. Extract raw text from PDF
-        const buffer = fs.readFileSync(filePath);
-        const parsed = await pdf(buffer);
-        const rawText = parsed.text;
+        // Clean up any existing chunks for this file in case of partial runs
+        try {
+          await deleteChunksBySource(filename);
+        } catch (err) {
+          console.warn(`(cleanup warning: ${err.message}) `);
+        }
+
+        // 1. Extract raw text via Python embedder service (PyMuPDF + OCR fallback)
+        const { text: rawText, method } = await extractTextFromPDF(filePath, disableOcr);
+        process.stdout.write(`[${method}] `);
 
         if (!rawText || rawText.trim().length < 50) {
-          console.log('⚠️  Too little text extracted, skipping');
+          if (method === 'none') {
+            console.log('⚠️  Scanned PDF — OCR not installed in embedder or disabled, skipping');
+          } else {
+            console.log('⚠️  Too little text extracted, skipping');
+          }
           continue;
         }
 
@@ -273,6 +314,17 @@ async function ingest() {
         // 5. Store in ChromaDB
         await addChunks(chunksWithVectors);
 
+        // Update checkpoint
+        if (!checkpointSet.has(filename)) {
+          checkpointSet.add(filename);
+          checkpoint.completed.push(filename);
+          try {
+            fs.writeFileSync(CHECKPOINT_PATH, JSON.stringify(checkpoint, null, 2), 'utf8');
+          } catch (err) {
+            console.warn(`(checkpoint save warning: ${err.message}) `);
+          }
+        }
+
         console.log(`✅ ${chunks.length} chunks`);
         totalFiles++;
         totalChunks += chunks.length;
@@ -293,26 +345,62 @@ async function ingest() {
 }
 
 /**
- * Calls the Python embedder in batch mode for efficiency.
- * Falls back to individual calls if batch returns wrong count.
+ * Sends a PDF file to the Python embedder's /extract-text endpoint.
+ * The embedder tries PyMuPDF first, then falls back to Tesseract OCR
+ * for scanned PDFs.
+ *
+ * @param {string} filePath — absolute path to the PDF file
+ * @param {boolean} disableOcr — whether to bypass OCR fallback
+ * @returns {{ text: string, method: 'text'|'ocr'|'none', pages: number }}
+ */
+async function extractTextFromPDF(filePath, disableOcr = false) {
+  const buffer = fs.readFileSync(filePath);
+  const pdf_b64 = buffer.toString('base64');
+
+  try {
+    const response = await axios.post(
+      `${process.env.EMBEDDER_URL}/extract-text`,
+      { pdf_b64, disable_ocr: disableOcr },
+      { timeout: 300_000 }  // 5 min — OCR on large docs can take a while
+    );
+    return {
+      text:   response.data.text   || '',
+      method: response.data.method || 'unknown',
+      pages:  response.data.pages  || 0,
+    };
+  } catch (err) {
+    throw new Error(`Text extraction failed for ${path.basename(filePath)}: ${err.message}`);
+  }
+}
+
+/**
+ * Calls the Python embedder in batches for memory efficiency.
+ * Falls back to individual calls if a batch fails.
  */
 async function fetchBatchEmbeddings(texts) {
   const axios = require('axios');
-  try {
-    const response = await axios.post(`${process.env.EMBEDDER_URL}/embed`, { text: texts });
-    if (response.data.vectors && response.data.vectors.length === texts.length) {
-      return response.data.vectors;
+  const BATCH_SIZE = 32;
+  const vectors = [];
+
+  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+    const batch = texts.slice(i, i + BATCH_SIZE);
+    try {
+      const response = await axios.post(`${process.env.EMBEDDER_URL}/embed`, { text: batch });
+      if (response.data.vectors && response.data.vectors.length === batch.length) {
+        vectors.push(...response.data.vectors);
+      } else {
+        throw new Error('Invalid vector count returned from embedder');
+      }
+    } catch (err) {
+      console.warn(`\n   ⚠️  Batch embed failed for batch index ${i}, falling back to individual calls:`, err.message);
+      // Fallback for this batch
+      for (const text of batch) {
+        const response = await axios.post(`${process.env.EMBEDDER_URL}/embed`, { text });
+        vectors.push(response.data.vector);
+      }
     }
-  } catch (err) {
-    console.warn('\n   ⚠️  Batch embed failed, falling back to individual calls:', err.message);
   }
 
-  // Fallback: individual calls
-  const vectors = [];
-  for (const text of texts) {
-    const response = await axios.post(`${process.env.EMBEDDER_URL}/embed`, { text });
-    vectors.push(response.data.vector);
-  }
   return vectors;
 }
 
