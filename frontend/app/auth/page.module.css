@@ -1,0 +1,291 @@
+/* ── Page ──────────────────────────────────────────────────── */
+.page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--bg);
+}
+
+/* ── Left ──────────────────────────────────────────────────── */
+.left {
+  display: flex;
+  flex-direction: column;
+  padding: 32px 48px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-3);
+  transition: color var(--transition);
+  width: fit-content;
+}
+.backLink:hover { color: var(--text-2); }
+
+.leftContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 32px;
+  max-width: 420px;
+  padding: 20px 0;
+}
+
+.leftTop {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.leftEyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-4);
+  margin: 0;
+}
+
+.leftHeading {
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.leftSub {
+  font-size: 0.9375rem;
+  color: var(--text-3);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ── Stats Grid ────────────────────────────────────────────── */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.statCard {
+  background: var(--bg);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background var(--transition-md);
+}
+.statCard:hover { background: var(--surface-2); }
+
+.statVal {
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  color: var(--text-4);
+  line-height: 1.4;
+}
+
+/* ── Quote Card ────────────────────────────────────────────── */
+.quoteCard {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quoteText {
+  font-size: 0.875rem;
+  color: var(--text-2);
+  line-height: 1.7;
+  margin: 0;
+  font-style: italic;
+}
+
+.quoteFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quoteAuthor {
+  font-size: 0.75rem;
+  color: var(--text-4);
+  font-weight: 500;
+}
+
+.quoteNext {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-4);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.quoteNext:hover {
+  background: var(--surface-3);
+  color: var(--text-2);
+  border-color: var(--border-2);
+}
+
+/* ── Right ─────────────────────────────────────────────────── */
+.right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+}
+
+.formWrap {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.formHeader { display: flex; flex-direction: column; gap: 4px; }
+.formTitle  { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+
+/* ── Toggle ────────────────────────────────────────────────── */
+.toggle {
+  display: flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+.toggleBtn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-4);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+.toggleActive { background: var(--surface-3); color: var(--text-2); }
+
+/* ── Form ──────────────────────────────────────────────────── */
+.form { display: flex; flex-direction: column; gap: 13px; }
+
+.formGroup { display: flex; flex-direction: column; gap: 5px; }
+.formLabel { font-size: 0.8125rem; color: var(--text-2); font-weight: 500; }
+
+.formInput {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 0.875rem;
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--transition), background var(--transition);
+}
+.formInput::placeholder { color: var(--text-4); }
+.formInput:focus { border-color: var(--border-2); background: var(--surface-3); }
+.inputError { border-color: var(--error) !important; }
+.errMsg { display: block; font-size: 0.75rem; color: var(--error); }
+
+.passWrap { position: relative; }
+.eyeBtn {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--text-4); padding: 4px;
+  display: flex; align-items: center; transition: color var(--transition);
+}
+.eyeBtn:hover { color: var(--text-3); }
+
+.forgotRow { display: flex; justify-content: flex-end; margin-top: -4px; }
+.forgotLink { font-size: 0.8125rem; color: var(--text-3); transition: color var(--transition); }
+.forgotLink:hover { color: var(--text-2); }
+
+.submitBtn {
+  width: 100%;
+  padding: 11px;
+  background: var(--text);
+  color: var(--bg);
+  border: 1px solid var(--text);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+  margin-top: 2px;
+}
+.submitBtn:hover:not(:disabled) { background: #d4d4d4; border-color: #d4d4d4; }
+.submitBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Divider ───────────────────────────────────────────────── */
+.dividerRow { display: flex; align-items: center; gap: 12px; }
+.dividerLine { flex: 1; height: 1px; background: var(--border); display: block; }
+.dividerText { font-size: 0.75rem; color: var(--text-4); }
+
+/* ── Social ────────────────────────────────────────────────── */
+.socialBtns { display: flex; flex-direction: column; gap: 8px; }
+.socialBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.socialBtn:hover { background: var(--surface-3); border-color: var(--border-2); color: var(--text); }
+
+/* ── Switch ────────────────────────────────────────────────── */
+.switchMode { text-align: center; font-size: 0.8125rem; color: var(--text-4); margin: 0; }
+.switchLink {
+  background: none; border: none; color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 500; cursor: pointer;
+  transition: color var(--transition);
+}
+.switchLink:hover { color: var(--text); }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .page   { grid-template-columns: 1fr; }
+  .left   { display: none; }
+  .right  { align-items: flex-start; padding-top: 80px; }
+  .formWrap { max-width: 100%; }
+}

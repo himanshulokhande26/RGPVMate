@@ -1,0 +1,346 @@
+/* ── Page ──────────────────────────────────────────────────── */
+.page {
+  background: var(--bg);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Nav ───────────────────────────────────────────────────── */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(13, 13, 13, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.navInner {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  gap: 32px;
+}
+.navLogo {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+.navLink {
+  padding: 5px 12px;
+  font-size: 0.875rem;
+  color: var(--text-3);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+}
+.navLink:hover { color: var(--text-2); background: var(--surface-2); }
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Hero (two-column) ────────────────────────────────────── */
+.heroSection {
+  padding: 0;
+  border: none;
+}
+.heroInner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 56px;
+  padding-top: 72px;
+  padding-bottom: 72px;
+}
+.heroLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.heroRight {
+  /* Let the chat demo fill its column */
+}
+.heroHeading {
+  font-size: clamp(1.625rem, 3vw, 2.625rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  color: var(--text);
+}
+.heroDesc {
+  font-size: clamp(0.9375rem, 1.5vw, 1.0625rem);
+  color: var(--text-3);
+  line-height: 1.7;
+  margin: 0;
+  min-height: 1.7em;
+}
+.cycledText {
+  color: var(--text-2);
+}
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--text-3);
+  border-radius: 1px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s ease-in-out infinite;
+}
+.heroCta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Divider ───────────────────────────────────────────────── */
+.fullDivider { height: 1px; background: var(--border); }
+
+.chatDemoWrap { max-width: 680px; margin: 0 auto; }
+
+.chatWindow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+.chatTitleBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.chatDots { display: flex; align-items: center; gap: 6px; }
+.dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  display: block;
+}
+.chatTitle { font-size: 0.8125rem; color: var(--text-3); font-weight: 500; }
+.chatBody {
+  padding: 28px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 260px;
+}
+.chatMsg { display: flex; flex-direction: column; gap: 8px; }
+.chatRole {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.chatUserText {
+  font-size: 1rem;
+  color: var(--text);
+  line-height: 1.6;
+  margin: 0;
+}
+.chatBotText {
+  font-size: 0.9375rem;
+  color: var(--text-2);
+  line-height: 1.7;
+  margin: 0;
+  min-height: 1.7em;
+}
+.codeBlock {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.codeLine {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--text-3);
+  line-height: 1.6;
+  white-space: pre;
+}
+.chatSources { display: flex; flex-wrap: wrap; gap: 8px; }
+.sourceChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-family: 'SF Mono', Consolas, monospace;
+  white-space: nowrap;
+}
+
+/* ── Section ───────────────────────────────────────────────── */
+.section { padding: 80px 0; }
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 48px;
+  max-width: 540px;
+}
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-4);
+  margin: 0;
+}
+.sectionTitle {
+  font-size: clamp(1.375rem, 2.5vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+/* ── Capabilities ──────────────────────────────────────────── */
+.capGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.capCard {
+  padding: 28px 28px 32px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: background var(--transition-md);
+}
+.capCard:hover { background: var(--surface); }
+.capNum {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.capTitle { font-size: 1rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+.capDesc { font-size: 0.875rem; color: var(--text-3); line-height: 1.7; margin: 0; }
+
+/* ── Steps ─────────────────────────────────────────────────── */
+.steps { display: flex; flex-direction: column; }
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--border);
+}
+.step:last-child { border-bottom: none; }
+.stepNum {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-4);
+  width: 24px;
+  flex-shrink: 0;
+  padding-top: 3px;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.stepTitle { font-size: 1rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; margin-bottom: 6px; }
+.stepDesc  { font-size: 0.875rem; color: var(--text-3); line-height: 1.7; margin: 0; max-width: 520px; }
+
+/* ── Stats ─────────────────────────────────────────────────── */
+.statsSection { padding: 60px 0; }
+.statsGrid { display: flex; align-items: center; }
+.statItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 32px;
+}
+.statItem:first-child { padding-left: 0; }
+.statDivider { width: 1px; height: 48px; background: var(--border); flex-shrink: 0; }
+.statVal  { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.04em; color: var(--text); line-height: 1; }
+.statLabel{ font-size: 0.8125rem; color: var(--text-3); line-height: 1.4; }
+
+/* ── Footer ────────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+.footerTop {
+  padding: 20px 0;
+}
+.footerMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.footerLinks {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.footerLink {
+  font-size: 0.8125rem;
+  color: var(--text-4);
+  transition: color var(--transition);
+}
+.footerLink:hover { color: var(--text-2); }
+
+.adminLink {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.adminLink:hover { color: var(--text-2); border-color: var(--border-2); }
+
+/* Giant brand name — sits above footer links */
+.brandName {
+  font-size: clamp(5rem, 18vw, 18rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.85;
+  color: var(--text);
+  padding: 12px 20px 0;
+  margin-left: -0.02em;
+  overflow: hidden;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .heroInner { grid-template-columns: 1fr; gap: 40px; padding-top: 52px; padding-bottom: 52px; }
+  .heroRight { max-width: 600px; margin: 0 auto; width: 100%; }
+}
+@media (max-width: 768px) {
+  .capGrid { grid-template-columns: 1fr; }
+  .statsGrid { flex-direction: column; align-items: flex-start; gap: 24px; }
+  .statItem { padding: 0; }
+  .statDivider { display: none; }
+  .navLinks { display: none; }
+  .brandName { font-size: clamp(3.5rem, 20vw, 8rem); padding: 8px 16px 0; }
+  .chatBody { padding: 20px 18px 18px; }
+}
