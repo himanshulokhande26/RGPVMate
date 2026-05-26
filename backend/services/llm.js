@@ -4,6 +4,7 @@
 'use strict';
 
 const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Parse multiple API keys (comma-separated) or fallback to single key
 const apiKeys = (process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || '')
@@ -17,8 +18,22 @@ let currentClientIndex = 0;
 if (clients.length === 0) {
   console.warn('⚠️ No GROQ_API_KEY or GROQ_API_KEYS defined in .env!');
 }
+console.log(`🔑 Groq: ${clients.length} API key(s) loaded. Rotation: ${clients.length > 1 ? 'enabled' : 'disabled (single key)'}`);
+
+// Gemini fallback — used only when ALL Groq keys are rate-limited (429)
+const geminiClient = process.env.GEMINI_API_KEY
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+  : null;
+if (geminiClient) {
+  console.log('✅ Gemini fallback API: ready (activates only when all Groq keys are exhausted)');
+} else {
+  console.warn('⚠️ GEMINI_API_KEY not set — no fallback if all Groq keys are rate-limited');
+}
 
 const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// Token cap per chunk: prevents one huge PYQ PDF chunk from blowing up the payload.
+// 1200 chars ≈ 300 tokens — generous for context but safe under Groq's 8K limit per message.
+const MAX_CHUNK_CHARS = parseInt(process.env.MAX_CHUNK_CHARS || '1200', 10);
 
 // ── Patterns for local context extraction (no API calls needed) ──────────────
 const SEM_PATTERNS = [
@@ -168,8 +183,14 @@ const SYSTEM_PROMPT = SYSTEM_PROMPT_LINES.join('\n');
  * Uses Groq (llama-3.3-70b-versatile) — 14,400 req/day free.
  */
 async function generateAnswer(question, chunks) {
+  // Trim each chunk to MAX_CHUNK_CHARS to prevent payload bloat (biggest 413 cause)
   const contextBlock = chunks
-    .map((chunk, i) => '[Chunk ' + (i + 1) + ' \u2014 Source: ' + chunk.metadata.source + ']\n' + chunk.text)
+    .map((chunk, i) => {
+      const trimmed = chunk.text.length > MAX_CHUNK_CHARS
+        ? chunk.text.slice(0, MAX_CHUNK_CHARS) + ' […]'
+        : chunk.text;
+      return '[Chunk ' + (i + 1) + ' — Source: ' + chunk.metadata.source + ']\n' + trimmed;
+    })
     .join('\n\n');
 
   const userMessage = [
@@ -183,6 +204,8 @@ async function generateAnswer(question, chunks) {
   let completion = null;
   let attempts = 0;
   const maxAttempts = clients.length || 1;
+  // Track which key index we started on for proper round-robin after success
+  const startIndex = currentClientIndex;
 
   while (attempts < maxAttempts) {
     try {
@@ -191,6 +214,10 @@ async function generateAnswer(question, chunks) {
         throw new Error('No Groq clients initialized');
       }
 
+      // Use fewer tokens for tutorial/casual queries (they never need long answers)
+      const isTutorialOrCasual = /\b(what is|explain|how to|how does|define|tutorial)\b/i.test(question)
+        && !/\b(syllabus|scheme|passing|fee|exams?|notices?|announcements?)\b/i.test(question);
+
       completion = await currentClient.chat.completions.create({
         model: MODEL,
         messages: [
@@ -198,8 +225,11 @@ async function generateAnswer(question, chunks) {
           { role: 'user', content: userMessage },
         ],
         temperature: 0.55,
-        max_tokens: 1024,
+        max_tokens: isTutorialOrCasual ? 700 : 1024,
       });
+
+      // Advance to the next key for true round-robin (so no single key bears all load)
+      currentClientIndex = (currentClientIndex + 1) % clients.length;
       break; // Success! Exit retry loop
     } catch (err) {
       const is429 = err.status === 429 || (err.message && err.message.includes('429'));
@@ -207,10 +237,35 @@ async function generateAnswer(question, chunks) {
         attempts++;
         const prevIndex = currentClientIndex;
         currentClientIndex = (currentClientIndex + 1) % clients.length;
-        console.warn(`⚠️ Groq Key #${prevIndex + 1} rate limited (429). Rotating to Key #${currentClientIndex + 1}... (Attempt ${attempts}/${maxAttempts})`);
+        console.warn(`⚠️ Groq Key #${prevIndex + 1}/${clients.length} rate limited (429). Rotating to Key #${currentClientIndex + 1}... (Attempt ${attempts}/${maxAttempts})`);
         continue;
       }
-      throw err; // Re-throw error if not 429, or if all rotated keys failed
+
+      // All Groq keys exhausted — try Gemini as final fallback
+      if (is429 && geminiClient) {
+        console.warn(`⚠️ All ${clients.length} Groq key(s) rate limited. Falling back to Gemini...`);
+        try {
+          const geminiModel = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
+          const geminiPrompt = SYSTEM_PROMPT + '\n\n' + userMessage;
+          const geminiResult = await geminiModel.generateContent(geminiPrompt);
+          const geminiText = geminiResult.response.text().trim();
+          console.log('✅ Gemini fallback succeeded.');
+          // Strip source leaks same as Groq path
+          const cleanAnswer = geminiText
+            .replace(/^[ \t]*\*{0,2}sources?\*{0,2}:[^\n]*/gim, '')
+            .replace(/[ \t]*[([][ \t]*(?:source|sources|ref|reference|from)?[ \t]*:?[ \t]*RGPV_[A-Za-z0-9_-]+\.pdf[\])]/gi, '')
+            .replace(/[ \t]*(?:- )?\b(?:source|sources|ref|reference|from)?[ \t]*:?[ \t]*RGPV_[A-Za-z0-9_-]+\.pdf\b/gi, '')
+            .trim();
+          // Reuse the same source-suppression logic below by setting completion-like result
+          completion = { choices: [{ message: { content: cleanAnswer } }] };
+          break;
+        } catch (geminiErr) {
+          console.error('❌ Gemini fallback also failed:', geminiErr.message);
+          throw geminiErr;
+        }
+      }
+
+      throw err; // Re-throw if not 429, or if both Groq and Gemini failed
     }
   }
 

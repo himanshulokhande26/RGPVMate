@@ -345,6 +345,76 @@ async function runAll() {
     check('Health endpoint reachable', false, e.message);
   }
 
+  // ─── 15. INVALID SEMESTER / FILTER EDGE CASES ────────────────────────────────
+  section('15. INVALID SEMESTER / FILTER EDGE CASES');
+  const invalidSemTests = [
+    { q: 'give me syllabus', opts: { semester: 99 }, label: 'sem=99 (out of range)' },
+    { q: 'give me syllabus', opts: { semester: -1 }, label: 'sem=-1 (negative)' },
+    { q: 'give me syllabus', opts: { semester: 0  }, label: 'sem=0 (zero)' },
+    { q: 'give me syllabus', opts: { semester: 'abc' }, label: 'sem=abc (string)' },
+  ];
+  for (const { q, opts, label } of invalidSemTests) {
+    try {
+      const r = await ask(q, opts);
+      // Should NOT crash — server must return a valid response (even if "no info found")
+      check(`${label} — server survives`, typeof r.answer === 'string' && r.answer.length > 0);
+    } catch (e) {
+      // 400 is acceptable (validation), 500 is NOT
+      const status = e.response?.status;
+      check(`${label} — server survives (status ${status || 'network error'})`, status === 400,
+        `Got unexpected error: ${e.message}`);
+    }
+  }
+
+  // ─── 16. HINGLISH SUBJECT-CODE QUERIES ───────────────────────────────────────
+  section('16. HINGLISH SUBJECT-CODE QUERIES');
+  const hinglishTests = [
+    { q: 'CS501 ka syllabus batao', label: 'Subject code in Hinglish' },
+    { q: 'mujhe CS301 ke PYQ chahiye', label: 'PYQ request in Hinglish' },
+    { q: 'data structures 3rd sem ke top questions', label: 'Natural Hinglish subject name' },
+  ];
+  for (const { q, label } of hinglishTests) {
+    try {
+      const r = await ask(q, { branch: 'Computer Science Engineering', semester: 3 });
+      check(`${label} — returns content`, r.answer.length > 30);
+    } catch (e) { check(`${label}`, false, e.message); }
+  }
+
+  // ─── 17. MULTI-TURN SUBJECT SWITCH ────────────────────────────────────────────
+  section('17. MULTI-TURN SUBJECT SWITCH');
+  try {
+    // Turn 1: Ask about CS301
+    const t1 = await ask('tell me about CS301', { branch: 'Computer Science Engineering', semester: 3 });
+    check('Subject switch turn 1 — CS301 answered', t1.answer.length > 30);
+
+    // Turn 2: Switch to a completely different subject in the same convo
+    const history = [
+      { role: 'user',      content: 'tell me about CS301' },
+      { role: 'assistant', content: t1.answer },
+    ];
+    const t2 = await ask('now what about IT502', { branch: 'Information Technology', semester: 5, history });
+    check('Subject switch turn 2 — IT502 answered', t2.answer.length > 30);
+    check('Subject switch — IT502 answer does not talk about CS301',
+      !t2.answer.toUpperCase().includes('CS301'));
+  } catch (e) { check('Multi-turn subject switch', false, e.message); }
+
+  // ─── 18. CONCURRENT REQUEST STRESS TEST ───────────────────────────────────────
+  section('18. CONCURRENT REQUESTS (Key Rotation Stress)');
+  try {
+    // Fire 4 requests simultaneously to force Groq key rotation
+    const concurrentQueries = [
+      ask('what is a linked list'),
+      ask('explain bubble sort'),
+      ask('what is recursion'),
+      ask('define stack data structure'),
+    ];
+    const results = await Promise.allSettled(concurrentQueries);
+    const succeeded = results.filter(r => r.status === 'fulfilled' && r.value.answer.length > 30).length;
+    const failed_count = results.filter(r => r.status === 'rejected').length;
+    check(`Concurrent requests: ${succeeded}/4 succeeded`, succeeded >= 3,
+      `${failed_count} request(s) failed outright`);
+  } catch (e) { check('Concurrent requests', false, e.message); }
+
   // ─── SUMMARY ─────────────────────────────────────────────────────────────────
   console.log(`\n${BOLD}══════════════════════════════════════════════${RESET}`);
   console.log(`${BOLD}TEST RESULTS:${RESET}`);

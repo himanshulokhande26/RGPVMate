@@ -1,6 +1,6 @@
 // scripts/ingest.js
 // Run with: npm run ingest
-// Loads all PDFs from the /documents folder into ChromaDB.
+// Loads all PDFs from the /documents folder into Qdrant Cloud.
 // Safe to re-run — skips files already ingested (checks by source name).
 // Text extraction is delegated to the Python embedder service (/extract-text)
 // which uses PyMuPDF for text PDFs and Tesseract OCR for scanned PDFs.
@@ -200,9 +200,9 @@ async function ingest() {
   try {
     const existing = await listDocuments();
     alreadyIngested = new Set(existing.map(d => d.source));
-    console.log(`📋 Already in ChromaDB: ${alreadyIngested.size} document(s)\n`);
+    console.log(`📋 Already in Qdrant Cloud: ${alreadyIngested.size} document(s)\n`);
   } catch (err) {
-    console.warn('⚠️  Could not reach ChromaDB to check existing docs.\n');
+    console.warn('⚠️  Could not reach Qdrant Cloud to check existing docs.\n');
   }
 
   // Load checkpoint
@@ -311,7 +311,7 @@ async function ingest() {
           vector: batchResponse[i],
         }));
 
-        // 5. Store in ChromaDB
+        // 5. Store in Qdrant Cloud
         await addChunks(chunksWithVectors);
 
         // Update checkpoint

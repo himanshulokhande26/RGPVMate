@@ -16,7 +16,11 @@
     "scrape:notices:dry": "node scripts/scrape_notices.js --dry-run",
     "scrape:notices:force": "node scripts/scrape_notices.js --force",
     "notices:schedule": "node scripts/schedule_notices.js",
-    "notices:schedule:now": "node scripts/schedule_notices.js --run-now"
+    "notices:schedule:now": "node scripts/schedule_notices.js --run-now",
+    "scrape:pyqs": "node scripts/scrape_pyqs.js",
+    "scrape:pyqs:dry": "node scripts/scrape_pyqs.js --dry-run",
+    "scrape:pyqs:debug": "node scripts/scrape_pyqs.js --dry-run --debug",
+    "scrape:pyqs:cse": "node scripts/scrape_pyqs.js --branch CSE"
   },
   "keywords": [
     "rgpv",
@@ -28,7 +32,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@google/generative-ai": "^0.24.0",
+    "@google/generative-ai": "^0.24.1",
     "@qdrant/js-client-rest": "^1.18.0",
     "axios": "^1.9.0",
     "cors": "^2.8.5",

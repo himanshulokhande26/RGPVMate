@@ -253,8 +253,9 @@ router.post('/', optionalAuth, async (req, res, next) => {
     if (isNoticeQuery) {
       filters.type = 'notice';
     } else if (isPyqQuery) {
+      // NOTE: Do NOT filter PYQs by branch — all ingested PYQs carry CSE metadata
+      // regardless of branch. The keyword re-ranker handles subject relevance.
       filters.type = 'pyq';
-      if (activeBranch) filters.branch = activeBranch;
     } else {
       if (activeSemester)   filters.semester   = activeSemester;
       if (activeBranch)     filters.branch     = activeBranch;
@@ -295,11 +296,18 @@ router.post('/', optionalAuth, async (req, res, next) => {
         // 2. Keyword matches bonus
         let keywordMatches = 0;
         queryKeywords.forEach(kw => {
-          if (sourceLower.includes(kw)) {
-            keywordMatches++;
-          }
+          if (sourceLower.includes(kw)) keywordMatches++;
         });
         score += keywordMatches * 0.5;
+
+        // 3. IT-branch alias: IT/it subject codes share papers with CSE/CD naming
+        //    e.g. "IT501" → also match cs-5... cd-... prefixes in filenames
+        if (activeBranch === 'Information Technology') {
+          if (sourceLower.includes('_it_') || sourceLower.includes('-it-')) score += 0.8;
+          // IT papers often appear in CSE/CD/AIML folders
+          if (queryNumber && (sourceLower.includes('cs-' + queryNumber.slice(1)) ||
+              sourceLower.includes('cd-' + queryNumber.slice(1)))) score += 1.0;
+        }
 
         return { chunk, score };
       });
