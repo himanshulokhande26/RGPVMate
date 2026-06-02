@@ -234,6 +234,39 @@ select.form-input {
 }
 .prose a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 
+/* Markdown Tables */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.prose thead {
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border-2);
+}
+.prose th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+.prose td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+}
+.prose tr:last-child td {
+  border-bottom: none;
+}
+.prose tr:hover td {
+  background: var(--surface-3);
+}
+
 /* ── Animations ────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }

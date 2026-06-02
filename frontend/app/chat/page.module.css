@@ -441,6 +441,65 @@
   display: block;
 }
 
+/* ── Code Blocks ───────────────────────────────────────────── */
+.codeBlockWrapper {
+  margin: 1.2em 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111111; /* Very dark background for the whole block */
+}
+.codeBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.codeLanguage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: #e5e5e5;
+  font-weight: 600;
+  text-transform: capitalize;
+  font-family: var(--font-inter), sans-serif;
+}
+.codeLanguage svg {
+  color: #888;
+}
+.codeCopyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+}
+.codeCopyBtn:hover {
+  background: rgba(255,255,255,0.1);
+  color: #e5e5e5;
+}
+.codeCopiedText {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #2ecc71; /* Green color for success */
+  font-weight: 600;
+}
+.codeBlockWrapper pre {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 16px !important;
+}
+
 /* ── Input — full width wrapper, inner centred ────────────── */
 .inputWrapper {
   flex-shrink: 0;
@@ -507,6 +566,82 @@
   border-color: var(--text) !important;
 }
 .sendBtnActive:hover { background: #d4d4d4 !important; }
+
+/* ── Avatar (topbar) ──────────────────────────────────────── */
+.avatarBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-decoration: none;
+  transition: border-color var(--transition);
+}
+.avatarBtn:hover { border-color: var(--border-2); }
+.avatarInitials {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1;
+}
+.avatarImg {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ── Personalization banner (empty state) ─────────────────── */
+.personBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  max-width: 480px;
+  margin-bottom: 4px;
+}
+.personBannerIcon { font-size: 0.875rem; flex-shrink: 0; }
+.personBannerText {
+  font-size: 0.8125rem;
+  color: var(--text-4);
+  line-height: 1.4;
+}
+.personBannerText strong { color: var(--text-3); font-weight: 500; }
+
+/* ── Sidebar profile footer ───────────────────────────────── */
+.profileFooterLink {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: background var(--transition);
+}
+.profileFooterLink:hover { background: var(--surface-2); }
+.profileFooterAvatar {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.625rem; font-weight: 600;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.profileFooterName {
+  font-size: 0.8125rem;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {

@@ -7,6 +7,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'documents', label: 'Documents & Upload' },
   { id: 'notices',  label: 'Notices' },
   { id: 'pyq',      label: 'Past Papers' },
 ];
@@ -24,8 +25,17 @@ function StatCard({ label, value, sub }) {
 export default function AdminPanel() {
   const [tab,     setTab]     = useState('overview');
   const [stats,   setStats]   = useState(null);
+  const [documents, setDocuments] = useState([]);
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadData, setUploadData] = useState({
+    file: null,
+    documentType: 'syllabus',
+    semester: '',
+    branch: '',
+    scheme: ''
+  });
 
   useEffect(() => {
     // Redirect if no password stored
@@ -40,19 +50,78 @@ export default function AdminPanel() {
       'x-admin-password': pw,
     };
 
-    // Fetch notices data
+    // Fetch notices and stats data
     Promise.all([
+      fetch(`${API}/api/admin/stats`, { headers }).then(r => r.json()).catch(() => ({})),
+      fetch(`${API}/api/admin/documents`, { headers }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/api/notices?limit=50`, { headers }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/api/notices/alerts`,   { headers }).then(r => r.json()).catch(() => ({})),
-    ]).then(([all, alerts]) => {
+    ]).then(([sysStats, docsData, all, alerts]) => {
       setNotices(all.notices || []);
+      setDocuments(docsData.documents || []);
       setStats({
+        users: sysStats.users ?? 0,
+        threads: sysStats.threads ?? 0,
+        messages: sysStats.messages ?? 0,
+        documents: sysStats.documents ?? 0,
+        chunks: sysStats.chunks ?? 0,
         totalNotices: all.total || (all.notices?.length ?? 0),
         alertCount:   alerts.notices?.length ?? 0,
       });
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!uploadData.file) return alert('Please select a PDF file');
+    
+    setUploading(true);
+    const pw = sessionStorage.getItem('admin_password') || '';
+    const formData = new FormData();
+    formData.append('pdf', uploadData.file);
+    formData.append('documentType', uploadData.documentType);
+    if (uploadData.semester) formData.append('semester', uploadData.semester);
+    if (uploadData.branch) formData.append('branch', uploadData.branch);
+    if (uploadData.scheme) formData.append('scheme', uploadData.scheme);
+
+    try {
+      const res = await fetch(`${API}/api/admin/documents/upload`, {
+        method: 'POST',
+        headers: { 'x-admin-password': pw },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      alert(`Success! Ingested ${data.chunks} chunks.`);
+      setUploadData({ ...uploadData, file: null });
+      // Refresh documents
+      const docsRes = await fetch(`${API}/api/admin/documents`, {
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pw }
+      });
+      const docsData = await docsRes.json();
+      setDocuments(docsData.documents || []);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (sourceName) => {
+    if (!confirm(`Are you sure you want to delete all chunks for ${sourceName}?`)) return;
+    const pw = sessionStorage.getItem('admin_password') || '';
+    try {
+      const res = await fetch(`${API}/api/admin/documents/${sourceName}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': pw },
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      setDocuments(documents.filter(d => d.source !== sourceName));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const logout = () => {
     sessionStorage.removeItem('admin_password');
@@ -89,7 +158,7 @@ export default function AdminPanel() {
       <main className={styles.main}>
         <header className={styles.topbar}>
           <h1 className={styles.pageTitle}>
-            {tab === 'overview' ? 'Overview' : tab === 'notices' ? 'Notices' : 'Past Papers'}
+            {tab === 'overview' ? 'Overview' : tab === 'documents' ? 'Documents & Upload' : tab === 'notices' ? 'Notices' : 'Past Papers'}
           </h1>
         </header>
 
@@ -105,10 +174,12 @@ export default function AdminPanel() {
           ) : tab === 'overview' ? (
             <>
               <div className={styles.statsGrid}>
+                <StatCard label="Total Users" value={stats?.users} />
+                <StatCard label="Total Threads" value={stats?.threads} />
+                <StatCard label="Messages Sent" value={stats?.messages} />
+                <StatCard label="Vector Documents" value={stats?.documents} sub={`${stats?.chunks} total chunks`} />
                 <StatCard label="Total Notices" value={stats?.totalNotices} />
-                <StatCard label="Active Alerts"  value={stats?.alertCount} sub="HIGH + MEDIUM priority" />
-                <StatCard label="Past Papers"    value="3,000+" sub="across all branches" />
-                <StatCard label="Branches"       value="10+"    sub="all semesters" />
+                <StatCard label="Active Alerts" value={stats?.alertCount} sub="HIGH + MEDIUM priority" />
               </div>
 
               <section className={styles.section}>
@@ -136,6 +207,59 @@ export default function AdminPanel() {
                 </div>
               </section>
             </>
+          ) : tab === 'documents' ? (
+            <div className={styles.docsSection}>
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.sectionTitle}>Upload New PDF</h2>
+                </div>
+                <form onSubmit={handleUpload} className={styles.uploadForm}>
+                  <div className={styles.formRow}>
+                    <label>PDF File</label>
+                    <input type="file" accept="application/pdf" onChange={e => setUploadData({ ...uploadData, file: e.target.files[0] })} />
+                  </div>
+                  <div className={styles.formRow}>
+                    <label>Document Type</label>
+                    <select value={uploadData.documentType} onChange={e => setUploadData({ ...uploadData, documentType: e.target.value })}>
+                      <option value="syllabus">Syllabus</option>
+                      <option value="pyq">Past Year Question (PYQ)</option>
+                      <option value="rules">Ordinance / Rules</option>
+                      <option value="calendar">Academic Calendar</option>
+                      <option value="fees">Fee Structure</option>
+                    </select>
+                  </div>
+                  <div className={styles.formRow}>
+                    <label>Branch (Optional)</label>
+                    <input type="text" placeholder="e.g. Computer Science Engineering" value={uploadData.branch} onChange={e => setUploadData({ ...uploadData, branch: e.target.value })} />
+                  </div>
+                  <div className={styles.formRow}>
+                    <label>Semester (Optional)</label>
+                    <input type="number" placeholder="e.g. 5" value={uploadData.semester} onChange={e => setUploadData({ ...uploadData, semester: e.target.value })} />
+                  </div>
+                  <button type="submit" disabled={uploading || !uploadData.file} className={styles.submitBtn}>
+                    {uploading ? 'Ingesting PDF...' : 'Upload to Qdrant'}
+                  </button>
+                </form>
+              </section>
+              
+              <section className={styles.section} style={{ marginTop: '2rem' }}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.sectionTitle}>Ingested Documents ({documents.length})</h2>
+                </div>
+                <div className={styles.noticeTable}>
+                  {documents.map((d, i) => (
+                    <div key={i} className={styles.noticeRow}>
+                      <span className={styles.noticeTitle}>{d.source}</span>
+                      <span className={styles.noticeDate}>{d.chunks} chunks</span>
+                      <button onClick={() => handleDelete(d.source)} className={styles.deleteBtn}>Delete</button>
+                    </div>
+                  ))}
+                  {documents.length === 0 && (
+                    <p className={styles.emptyState}>No documents in Qdrant vector database.</p>
+                  )}
+                </div>
+              </section>
+            </div>
           ) : tab === 'notices' ? (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>

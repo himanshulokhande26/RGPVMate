@@ -1,0 +1,63 @@
+.customSelect {
+  position: relative;
+  z-index: 1;
+}
+.customSelectOpen {
+  z-index: 50;
+}
+.selectBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  gap: 8px;
+  transition: border-color var(--transition), background var(--transition);
+}
+.selectBtn:hover {
+  border-color: var(--border-2);
+  background: var(--surface-3);
+}
+.selectValue {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selectDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  z-index: 9999;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.selectOption {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  transition: background var(--transition), color var(--transition);
+}
+.selectOption:hover { background: var(--surface-3); color: var(--text-2); }
+.selectOptionActive {
+  background: var(--surface-3) !important;
+  color: var(--text) !important;
+}

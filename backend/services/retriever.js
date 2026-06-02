@@ -189,6 +189,18 @@ async function searchChunks(queryVector, filters = {}, topK = 4) {
       match: { value: filters.type }
     });
   }
+  if (filters.program) {
+    filter.must.push({
+      key: 'program',
+      match: { value: filters.program }
+    });
+  }
+  if (filters.isRgpvNotes) {
+    filter.must.push({
+      key: 'isRgpvNotes',
+      match: { value: filters.isRgpvNotes }
+    });
+  }
 
   const searchParams = {
     vector: queryVector,

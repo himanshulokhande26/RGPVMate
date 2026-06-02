@@ -1,0 +1,18 @@
+Questions:
+1. I can see in the Document & Upload section Ingested Document (4014) is this actual number of chunks ?
+2. What is the use of Notice section in Admin Pannel.
+3. Also you didn't answered that can we show the rate limit and usage of tokens in the UI ? also some data from MongoDB if needed (You suggest).
+4. Should we give change password option to user who created account using Github and Google OAuth.
+
+
+UI / Frontend:
+1. The Document & Upload UI of so much fucked up.
+2. The UI of branch dropdown in the profile section of user is still not completely accessible and visible.
+3. For program selection also create a dropdown similar to the 
+4. Also in all the other dropdowns, why you have added two border keep it simple with just one border only and also turn program and semester in to the dropdown.
+5. A copy button to directly copy code if it is there in the reponse.
+6. The gap between Academic Context and line above it in profile section is too close add some gap between them.
+
+Fixes:
+1. While changing the program when i selected BPharma then also i got the options of selecting branch that too engineering branches, we need to fix this because obviously B.Pharma don't have engineering branches.
+2. In related topics it should just give the more suggested question similar to the question asked but it also started explaining the related topics for eg: when i asked about linear search it gave me the response and in related topics to explore further it gave: "• Binary Search: An efficient searching algorithm that works by dividing the search space in half with each comparison. • Hashing: A technique used for efficient data storage and retrieval, where each item is mapped to a unique index. • Sorting Algorithms: Techniques used to arrange data in a specific order, such as bubble sort, selection sort, and merge sort." it alongwith suggesting the topics start explaining them in that same line.

@@ -8,7 +8,8 @@ const { optionalAuth } = require('../middleware/authGuard');
 const { getEmbedding, searchChunks } = require('../services/retriever');
 const { generateAnswer, condenseQuestion } = require('../services/llm');
 const { getCached, setCached } = require('../services/cache');
-const ChatHistory = require('../models/ChatHistory');
+const Thread = require('../models/Thread');
+const Message = require('../models/Message');
 const User = require('../models/User');
 
 // ── Sanitizer: strips LLM-injected Source lines from answer text ─────────────
@@ -85,7 +86,7 @@ function isAcknowledgment(text) {
 router.post('/', optionalAuth, async (req, res, next) => {
   const apiStart = Date.now();
   try {
-    const { question, semester, branch, history } = req.body;
+    const { question, semester, branch, history, threadId } = req.body;
 
     if (!question || question.trim().length === 0) {
       return res.status(400).json({ error: 'Question is required' });
@@ -145,6 +146,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
     let activeSemester   = undefined;
     let activeBranch     = undefined;
     let activeSystemType = undefined;
+    let activeProgram    = undefined;
 
     const qLower = condensedQuestion.toLowerCase();
 
@@ -195,18 +197,38 @@ router.post('/', optionalAuth, async (req, res, next) => {
       activeSystemType = 'Grading System';
     }
 
+    // 4b. Extract program from query (B.Tech vs BE vs M.Tech etc.)
+    if (/\b(b\.?tech|btech)\b/i.test(qLower)) {
+      activeProgram = 'B.Tech';
+    } else if (/\b(be|b\.e)\b/i.test(qLower)) {
+      activeProgram = 'BE';
+    } else if (/\b(m\.?tech|mtech)\b/i.test(qLower)) {
+      activeProgram = 'M.Tech.';
+    } else if (/\bmca\b/i.test(qLower)) {
+      activeProgram = 'MCA';
+    } else if (/\bmba\b/i.test(qLower)) {
+      activeProgram = 'MBA';
+    } else if (/\bdiploma\b/i.test(qLower)) {
+      activeProgram = 'Diploma';
+    }
+    if (activeProgram) console.log('\uD83C\uDFAF [chat] Program from query: "' + activeProgram + '"');
+
     // 5. Fallback to onboarding body params
     if (!activeSemester) activeSemester = semester ? Number(semester) : undefined;
-    if (!activeBranch)   activeBranch   = branch || undefined;
+    if (!activeBranch)   activeBranch   = branch   || undefined;
+    if (!activeProgram)  activeProgram  = req.body.program || undefined;
 
     // 6. Fallback to logged-in user profile
-    if (req.user && (!activeSemester || !activeBranch || !activeSystemType)) {
+    if (req.user && (!activeSemester || !activeBranch || !activeSystemType || !activeProgram)) {
       try {
-        const profile = await User.findOne({ googleId: req.user.googleId });
+        const profile = await User.findOne(
+          req.user.googleId ? { googleId: req.user.googleId } : { _id: req.user.id }
+        );
         if (profile) {
           if (!activeSemester)   activeSemester   = profile.semester;
           if (!activeBranch)     activeBranch     = profile.branch;
           if (!activeSystemType) activeSystemType = profile.systemType;
+          if (!activeProgram)    activeProgram    = profile.program;
         }
       } catch (dbErr) {
         console.warn('\u26A0\uFE0F [chat] Profile fetch failed (guest mode):', dbErr.message);
@@ -214,14 +236,16 @@ router.post('/', optionalAuth, async (req, res, next) => {
     }
 
     if (!activeSystemType) activeSystemType = 'Grading System';
+    // Default program to B.Tech (most common student query type) so BE docs aren't polluting results
+    if (!activeProgram) activeProgram = 'B.Tech';
 
-    console.log('\uD83D\uDD04 [chat] Filters: sem=' + activeSemester + ', branch="' + activeBranch + '", type="' + activeSystemType + '"');
+    console.log('\uD83D\uDD04 [chat] Filters: sem=' + activeSemester + ', branch="' + activeBranch + '", type="' + activeSystemType + '", program="' + activeProgram + '"');
 
     // ── Step 1: Embed condensed question ─────────────────────────────────────
     const isBroadQuery = qLower.includes('syllabus') || qLower.includes('subjects') || qLower.includes('courses');
     const isPyqQuery = qLower.includes('pyq') || qLower.includes('previous year') || qLower.includes('old paper') || qLower.includes('question paper') || qLower.includes('exam paper');
     const isNoticeQuery = /\b(notice|notices|announcement|announcements|circular|circulars|notification|notifications|latest\s+update|new\s+update)\b/i.test(qLower);
-    const topK = isPyqQuery ? 12 : (isBroadQuery || isNoticeQuery ? 5 : 4);
+    const topK = isPyqQuery ? 12 : (isBroadQuery ? 12 : (isNoticeQuery ? 5 : 4));
     const searchLimit = isPyqQuery ? 30 : topK;
 
     // Extract subject keywords & codes for PYQ chunk re-ranking
@@ -260,15 +284,61 @@ router.post('/', optionalAuth, async (req, res, next) => {
       if (activeSemester)   filters.semester   = activeSemester;
       if (activeBranch)     filters.branch     = activeBranch;
       if (activeSystemType) filters.systemType = activeSystemType;
+      if (activeProgram)    filters.program    = activeProgram;
     }
 
     console.log('\uD83D\uDD04 [chat] Querying Qdrant...');
-    let chunks = await searchChunks(vector, filters, searchLimit);
+    
+    // First attempt: If it's a broad syllabus query, strictly prefer high-quality rgpvnotes chunks.
+    let searchFilters = { ...filters };
+    if (isBroadQuery) {
+      searchFilters.isRgpvNotes = true;
+      // Drop restrictive filters because rgpvnotes chunks only contain 'program' and 'subject' metadata
+      delete searchFilters.semester;
+      delete searchFilters.branch;
+      delete searchFilters.systemType;
+    }
+    
+    let chunks = await searchChunks(vector, searchFilters, searchLimit);
+    
+    // Validate if the rgpvnotes chunks are actually relevant to the user's query
+    if (isBroadQuery && chunks.length > 0) {
+      const qAlphanumeric = qLower.replace(/[^a-z0-9]/g, '');
+      
+      const relevantChunks = chunks.filter(chunk => {
+        if (!chunk.metadata.subject) return false;
+        const subjectAlpha = chunk.metadata.subject.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return qAlphanumeric.includes(subjectAlpha) || chunk.distance < 0.55;
+      });
+
+      if (relevantChunks.length === 0) {
+        console.log(`\u26A0\uFE0F [chat] No relevant rgpvnotes match found for query. Falling back to PDF syllabus chunks...`);
+        chunks = await searchChunks(vector, filters, searchLimit);
+      } else {
+        chunks = relevantChunks;
+        console.log(`\uD83D\uDD04 [chat] Kept ${chunks.length} highly relevant rgpvnotes chunks.`);
+      }
+    } else if (chunks.length === 0 && isBroadQuery) {
+      console.log('\u26A0\uFE0F [chat] No rgpvnotes chunks found at all. Falling back to PDF syllabus chunks...');
+      chunks = await searchChunks(vector, filters, searchLimit);
+    }
+
+    // Post-retrieval cleanup: If we retrieved any high-quality rgpvnotes chunks,
+    // drop all PDF syllabus chunks to prevent LLM confusion.
+    if (chunks.some(c => c.metadata.isRgpvNotes)) {
+      const originalLength = chunks.length;
+      chunks = chunks.filter(c => c.metadata.isRgpvNotes || c.metadata.type !== 'syllabus');
+      if (originalLength !== chunks.length) {
+        console.log(`\uD83D\uDD04 [chat] Dropped ${originalLength - chunks.length} noisy PDF syllabus chunks in favor of rgpvnotes markdown.`);
+      }
+    }
+    
     console.log('\uD83D\uDD04 [chat] Retrieved ' + chunks.length + ' chunks');
 
-    // Self-healing: retry without branch/semester if empty
-    if (chunks.length === 0 && (filters.branch || filters.semester || filters.type)) {
-      console.log('\u26A0\uFE0F [chat] 0 results with filters. Retrying broad search...');
+    // Self-healing: retry without program/branch/semester if empty
+    if (chunks.length === 0 && (filters.branch || filters.semester || filters.type || filters.program)) {
+      console.log('\u26A0\uFE0F [chat] 0 results with filters. Retrying without program filter...');
+      // First try: keep systemType but drop program (catches cases where program metadata is missing)
       let fallbackFilters = {};
       if (isNoticeQuery) {
         fallbackFilters = { type: 'notice' };
@@ -276,9 +346,11 @@ router.post('/', optionalAuth, async (req, res, next) => {
         fallbackFilters = { type: 'pyq' };
       } else if (filters.systemType) {
         fallbackFilters = { systemType: filters.systemType };
+        if (filters.semester) fallbackFilters.semester = filters.semester;
+        if (filters.branch)   fallbackFilters.branch   = filters.branch;
       }
       chunks = await searchChunks(vector, fallbackFilters, searchLimit);
-      console.log('\uD83D\uDD04 [chat] Broad search: ' + chunks.length + ' chunks');
+      console.log('\uD83D\uDD04 [chat] Broad search (no program): ' + chunks.length + ' chunks');
     }
 
     // ── Step 2.5: Re-rank PYQ chunks using keyword-matching scores ───────────
@@ -322,7 +394,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
 
     // ── Step 3: Generate answer via Groq ─────────────────────────────────────
     console.log('\uD83D\uDD04 [chat] Generating answer via Groq (' + (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile') + ')...');
-    const { answer, sources } = await generateAnswer(condensedQuestion, chunks);
+    const { answer, sources } = await generateAnswer(condensedQuestion, chunks, history || []);
     console.log('\uD83D\uDD04 [chat] Answer length=' + answer.length + ', sources=' + sources.length);
 
     // ── Step 4: Save to cache (fire-and-forget, skip denial/"no info" answers) ──
@@ -342,20 +414,28 @@ router.post('/', optionalAuth, async (req, res, next) => {
     }
 
     // ── Step 5: Save to chat history (logged-in users only) ───────────────────
+    let currentThreadId = threadId;
     if (req.user) {
-      ChatHistory.saveAndCap({
-        userId:   req.user.googleId,
-        question: q,
-        answer,
-        sources,
-        semester: activeSemester,
-        branch:   activeBranch,
-      }).catch(err => console.error('[chat] History save failed:', err.message));
+      try {
+        const userId = req.user.googleId || req.user.id;
+        if (!currentThreadId) {
+          const newThread = await Thread.create({ userId, title: q.slice(0, 50) });
+          currentThreadId = newThread._id.toString();
+        } else {
+          await Thread.updateOne({ _id: currentThreadId }, { updatedAt: Date.now() });
+        }
+        await Message.create([
+          { threadId: currentThreadId, role: 'user', content: q },
+          { threadId: currentThreadId, role: 'assistant', content: answer, sources }
+        ]);
+      } catch (err) {
+        console.error('[chat] History save failed:', err.message);
+      }
     }
 
     // ── Step 6: Return to client ──────────────────────────────────────────────
     const elapsedSeconds = Number(((Date.now() - apiStart) / 1000).toFixed(2));
-    res.json({ answer: sanitizeAnswer(answer), sources, elapsedSeconds });
+    res.json({ answer: sanitizeAnswer(answer), sources, elapsedSeconds, threadId: currentThreadId });
 
   } catch (err) {
     console.error('💥 [chat] Error caught in route:', err);

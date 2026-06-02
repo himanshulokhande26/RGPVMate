@@ -12,10 +12,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const passport = require('./config/passport');
 
 const chatRoutes    = require('./routes/chat');
 const authRoutes    = require('./routes/auth');
-const historyRoutes = require('./routes/history');
+const threadsRoutes = require('./routes/threads');
 const adminRoutes   = require('./routes/admin');
 const noticesRoutes = require('./routes/notices');
 
@@ -33,6 +34,7 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -41,8 +43,8 @@ app.get('/health', (req, res) => {
 
 // ── API Routes ────────────────────────────────────────────────
 app.use('/api/chat',    chatRoutes);
+app.use('/api/chat/threads', threadsRoutes);
 app.use('/api/auth',    authRoutes);
-app.use('/api/history', historyRoutes);
 app.use('/api/admin',   adminRoutes);
 app.use('/api/notices', noticesRoutes);
 

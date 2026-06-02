@@ -246,3 +246,101 @@
   .sidebar { display: none; }
   .statsGrid { grid-template-columns: 1fr; }
 }
+
+/* ── Documents & Upload ───────────────────────────────────── */
+.docsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.uploadForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formRow label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.formRow input, .formRow select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 0.875rem;
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.formRow input:focus, .formRow select:focus {
+  border-color: var(--border-2);
+  background: var(--surface-3);
+}
+
+.formRow input[type="file"] {
+  padding: 8px 12px;
+  color: var(--text-3);
+}
+.formRow input[type="file"]::file-selector-button {
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  padding: 4px 10px;
+  margin-right: 12px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.formRow input[type="file"]::file-selector-button:hover {
+  background: var(--border);
+}
+
+.submitBtn {
+  margin-top: 8px;
+  padding: 12px 24px;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.submitBtn:hover:not(:disabled) {
+  background: var(--text-2);
+}
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deleteBtn {
+  font-size: 0.75rem;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.deleteBtn:hover {
+  background: rgba(248,113,113,0.2);
+}

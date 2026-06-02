@@ -6,9 +6,9 @@ import styles from './page.module.css';
 /* ── Cycling typewriter ── */
 const CYCLE_TEXTS = [
   'The ultimate AI study companion for RGPV students',
-  'instant step-by-step solutions',
-  'explore 3,000+ real PYQs',
-  'stay updated with official notice broadcasts',
+  'Instant step-by-step solutions',
+  'Explore 3,000+ real PYQs',
+  'Stay updated with official notice broadcasts',
 ];
 
 function useCycleTyping(texts, typeSpeed = 38, backSpeed = 18, pauseMs = 1600) {

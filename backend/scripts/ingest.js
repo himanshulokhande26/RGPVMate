@@ -245,7 +245,10 @@ async function ingest() {
       continue;
     }
 
-    const files = fs.readdirSync(folderPath).filter(f => f.toLowerCase().endsWith('.pdf'));
+    const files = fs.readdirSync(folderPath).filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      return ext === '.pdf' || ext === '.md' || ext === '.txt';
+    });
 
     if (files.length === 0) {
       console.log(`📂 ${folder}/ — empty, skipping`);
@@ -274,8 +277,18 @@ async function ingest() {
           console.warn(`(cleanup warning: ${err.message}) `);
         }
 
-        // 1. Extract raw text via Python embedder service (PyMuPDF + OCR fallback)
-        const { text: rawText, method } = await extractTextFromPDF(filePath, disableOcr);
+        let rawText, method;
+        
+        if (filename.toLowerCase().endsWith('.pdf')) {
+          const extracted = await extractTextFromPDF(filePath, disableOcr);
+          rawText = extracted.text;
+          method = extracted.method;
+        } else {
+          // For .md and .txt files, read directly
+          rawText = fs.readFileSync(filePath, 'utf8');
+          method = 'raw';
+        }
+        
         process.stdout.write(`[${method}] `);
 
         if (!rawText || rawText.trim().length < 50) {
