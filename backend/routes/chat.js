@@ -97,6 +97,26 @@ router.post('/', optionalAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Question is required' });
     }
 
+    // ── Input Validation ───────────────────────────────────────────────────
+    // Prevents malformed payloads from reaching the LLM pipeline.
+    // Note: semester and program are optional (guests may omit them).
+    const VALID_PROGRAMS  = ['B.Tech', 'B.Pharm', 'Diploma', 'MCA', 'MBA', 'M.Tech', 'BE'];
+    const VALID_SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    if (question.trim().length > 2000) {
+      return res.status(400).json({ error: 'Question is too long (max 2000 characters).' });
+    }
+    if (semester !== undefined && semester !== null && semester !== '' &&
+        !VALID_SEMESTERS.includes(Number(semester))) {
+      return res.status(400).json({ error: 'Invalid semester. Must be 1–8.' });
+    }
+    if (req.body.program && !VALID_PROGRAMS.includes(req.body.program)) {
+      return res.status(400).json({ error: 'Invalid program.' });
+    }
+    if (history !== undefined && !Array.isArray(history)) {
+      return res.status(400).json({ error: 'History must be an array.' });
+    }
+
     const q = question.trim();
 
     // ── LOCAL FAST-PATH BYPASSES (0 API calls) ────────────────────────────────
