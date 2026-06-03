@@ -249,7 +249,10 @@ RGPVMate/
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
-**Himanshu Lokhande** — B.Tech Computer Science Engineering, RGPV  
+**Himanshu Lokhande** — B.Tech Computer Science Engineering, RGPV
+
+**Vishal Saini** — B.Tech Computer Science Engineering, RGPV
+
 Built with the goal of making university resources actually accessible to students.
