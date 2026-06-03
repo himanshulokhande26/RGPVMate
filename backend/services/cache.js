@@ -8,11 +8,16 @@ const mongoose = require('mongoose');
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 const responseCacheSchema = new mongoose.Schema({
-  // Normalized cache key: lowercase, trimmed, punctuation-stripped question
+  // Normalized cache key: lowercase, trimmed, punctuation-stripped question + context
   cacheKey: { type: String, required: true, unique: true, index: true },
 
   // Original question (for debugging/display)
   question: { type: String, required: true },
+  context: {
+    branch: String,
+    semester: Number,
+    program: String
+  },
 
   // Cached response
   answer:  { type: String, required: true },
@@ -34,13 +39,15 @@ responseCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const ResponseCache = mongoose.model('ResponseCache', responseCacheSchema);
 
 // ── Key Normalization ─────────────────────────────────────────────────────────
-function normalizeKey(question) {
-  return question
+function normalizeKey(question, context = {}) {
+  const { branch = 'all', semester = 0, program = 'all' } = context;
+  const q = question
     .toLowerCase()
     .trim()
     .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g, ' ')  // strip punctuation
     .replace(/\s+/g, ' ')                             // collapse whitespace
     .trim();
+  return `${program}:${branch}:${semester}:${q}`;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -48,10 +55,11 @@ function normalizeKey(question) {
 /**
  * Look up a cached answer.
  * @param {string} question
+ * @param {object} context
  * @returns {Promise<{ answer: string, sources: string[], fromCache: true } | null>}
  */
-async function getCached(question) {
-  const key = normalizeKey(question);
+async function getCached(question, context) {
+  const key = normalizeKey(question, context);
   try {
     const doc = await ResponseCache.findOneAndUpdate(
       { cacheKey: key },
@@ -73,15 +81,17 @@ async function getCached(question) {
  * @param {string} question
  * @param {string} answer
  * @param {string[]} sources
+ * @param {object} context
  */
-async function setCached(question, answer, sources = []) {
-  const key = normalizeKey(question);
+async function setCached(question, answer, sources = [], context = {}) {
+  const key = normalizeKey(question, context);
   try {
     await ResponseCache.findOneAndUpdate(
       { cacheKey: key },
       {
         cacheKey: key,
         question,
+        context,
         answer,
         sources,
         cachedAt: new Date(),
@@ -95,4 +105,4 @@ async function setCached(question, answer, sources = []) {
   }
 }
 
-module.exports = { getCached, setCached };
+module.exports = { getCached, setCached, normalizeKey };

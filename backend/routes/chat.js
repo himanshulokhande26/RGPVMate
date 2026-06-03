@@ -56,10 +56,15 @@ function isSystemQuery(text) {
     /^(show|give|tell|reveal)\s+(me\s+)?(the\s+)?(api\s*)?key/i.test(t);
 
   // CRITICAL FIX: "which model/llm/ai" must be about RGPVMate itself, not academic topics.
+  // Guard: if query contains academic ML keywords, it's a student question — NOT a system query.
+  const isAcademicMLContext = /\b(machine\s*learning|neural\s*network|deep\s*learning|classification|regression|prediction|algorithm|cnn|rnn|lstm|svm|naive\s*bayes|random\s*forest|gradient|backprop|training|dataset|accuracy|loss\s*function|overfitting|perceptron)\b/i.test(t);
+
   const isModelQuery =
-    /\b(what|which)\s+(model|llm)\b/i.test(t) ||
-    /\b(what|which)\s+ai\s+(model|engine|are\s+you|do\s+you)\b/i.test(t) ||
-    /\byou\s+(use|run|using|running)\s+(model|llm|ai|api)\b/i.test(t);
+    !isAcademicMLContext && (
+      /\b(what|which)\s+(model|llm)\b/i.test(t) ||
+      /\b(what|which)\s+ai\s+(model|engine|are\s+you|do\s+you)\b/i.test(t) ||
+      /\byou\s+(use|run|using|running)\s+(model|llm|ai|api)\b/i.test(t)
+    );
 
   return (
     (hasSystem && hasArchitecture) ||
@@ -129,7 +134,14 @@ router.post('/', optionalAuth, async (req, res, next) => {
     }
 
     // ── Cache Lookup (before embedding + Groq call) ───────────────────────────
-    const cached = await getCached(q);
+    // NOTE: context is built later, but for the initial lookup we use body params directly
+    // so guests get branch-scoped caches immediately (before profile fetch)
+    const cacheCtxEarly = {
+      program: req.body.program || undefined,
+      branch: branch || undefined,
+      semester: semester ? Number(semester) : undefined,
+    };
+    const cached = await getCached(q, cacheCtxEarly);
     if (cached) {
       const elapsedSeconds = Number(((Date.now() - apiStart) / 1000).toFixed(2));
       return res.json({ ...cached, answer: sanitizeAnswer(cached.answer), elapsedSeconds, fromCache: true });
@@ -409,8 +421,13 @@ router.post('/', optionalAuth, async (req, res, next) => {
       /nahi bata sakta/i.test(answer) ||
       /details nahi/i.test(answer) ||
       /pata nahi/i.test(answer);
+    const cacheCtx = {
+      program: activeProgram,
+      branch: activeBranch,
+      semester: activeSemester,
+    };
     if (answer && !isDontKnow) {
-      setCached(q, answer, sources).catch(() => {});
+      setCached(q, answer, sources, cacheCtx).catch(() => {});
     }
 
     // ── Step 5: Save to chat history (logged-in users only) ───────────────────

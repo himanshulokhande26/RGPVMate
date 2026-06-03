@@ -290,11 +290,6 @@ function AuthContent() {
                 </div>
               )}
 
-              {mode === 'login' && (
-                <div className={styles.forgotRow}>
-                  <a href="#" className={styles.forgotLink}>Forgot password?</a>
-                </div>
-              )}
 
               {apiError && <p className={styles.apiError}>{apiError}</p>}
 

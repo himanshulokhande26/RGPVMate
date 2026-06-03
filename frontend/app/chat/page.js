@@ -429,7 +429,7 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, program, branch, semester]);
+  }, [input, loading, messages, program, branch, semester, activeThreadId, loadThreads]);
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
