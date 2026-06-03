@@ -389,9 +389,21 @@ export default function ChatPage() {
     setLoading(true);
     const start = Date.now();
 
+    // Placeholder bot message — will be filled token by token
+    const botMsgId = Date.now();
+    setMessages(prev => [...prev, {
+      id: botMsgId,
+      role: 'bot',
+      content: '',
+      rawContent: '',
+      sources: [],
+      elapsed: null,
+      streaming: true,
+    }]);
+
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('rgpv_token') : null;
-      const res  = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API}/api/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -399,33 +411,83 @@ export default function ChatPage() {
         },
         body: JSON.stringify({ question: q, program, branch, semester: Number(semester), history, threadId: activeThreadId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      
-      if (data.threadId && data.threadId !== activeThreadId) {
-        setActiveThreadId(data.threadId);
-        const token = localStorage.getItem('rgpv_token');
-        if (token) loadThreads(token);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
       }
 
-      setMessages(prev => [...prev, {
-        role: 'bot',
-        content: data.answer || 'No response received.',
-        rawContent: data.answer || '',
-        sources: Array.isArray(data.sources) ? data.sources : [],
-        elapsed: data.elapsedSeconds ?? elapsed,
-        streaming: true,   // ← triggers typewriter in Message
-      }]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulated = '';
+
+      // Hide the typing indicator once first token arrives
+      let firstToken = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let parsed;
+          try { parsed = JSON.parse(raw); } catch { continue; }
+
+          if (parsed.token !== undefined) {
+            accumulated += parsed.token;
+            if (firstToken) {
+              setLoading(false); // hide typing indicator once streaming starts
+              firstToken = false;
+            }
+            setMessages(prev => prev.map(m =>
+              m.id === botMsgId
+                ? { ...m, content: accumulated, rawContent: accumulated }
+                : m
+            ));
+          }
+
+          if (parsed.done) {
+            const elapsed = parsed.elapsedSeconds ?? ((Date.now() - start) / 1000).toFixed(1);
+            if (parsed.threadId && parsed.threadId !== activeThreadId) {
+              setActiveThreadId(parsed.threadId);
+              const t = localStorage.getItem('rgpv_token');
+              if (t) loadThreads(t);
+            }
+            setMessages(prev => prev.map(m =>
+              m.id === botMsgId
+                ? { ...m, sources: parsed.sources || [], elapsed, streaming: false }
+                : m
+            ));
+          }
+
+          if (parsed.error) {
+            setMessages(prev => prev.map(m =>
+              m.id === botMsgId
+                ? { ...m, content: parsed.error, rawContent: parsed.error, streaming: false }
+                : m
+            ));
+          }
+        }
+      }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'bot',
-        content: `**Could not connect to the backend.**\n\nMake sure the server is running on port 3000.\n\n${err.message}`,
-        rawContent: '',
-        sources: [],
-        elapsed: null,
-        streaming: false,
-      }]);
+      setMessages(prev => prev.map(m =>
+        m.id === botMsgId
+          ? {
+              ...m,
+              content: `**Could not connect to the backend.**\n\nMake sure the server is running on port 3000.\n\n${err.message}`,
+              rawContent: '',
+              streaming: false,
+            }
+          : m
+      ));
     } finally {
       setLoading(false);
     }
@@ -434,6 +496,25 @@ export default function ChatPage() {
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
+
+  const deleteThread = useCallback(async (threadId, e) => {
+    e.stopPropagation(); // don't trigger loadThreadMessages
+    const token = localStorage.getItem('rgpv_token');
+    if (!token) return;
+    try {
+      await fetch(`${API}/api/chat/threads/${threadId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      // Clear messages if deleting the active thread
+      if (activeThreadId === threadId) {
+        setMessages([]);
+        setActiveThreadId(null);
+      }
+      // Refresh sidebar
+      loadThreads(token);
+    } catch {}
+  }, [activeThreadId, loadThreads]);
 
   return (
     <div className={styles.layout}>
@@ -476,11 +557,25 @@ export default function ChatPage() {
               <p className={styles.sectionLabel}>Recent Chats</p>
               {threads.length > 0 ? (
                 threads.map(th => (
-                  <button key={th._id} 
-                    className={`${styles.histItem} ${activeThreadId === th._id ? styles.histItemActive : ''}`}
-                    onClick={() => loadThreadMessages(th._id)}>
-                    <span className={styles.histTitle}>{th.title}</span>
-                  </button>
+                  <div key={th._id} className={`${styles.histItem} ${activeThreadId === th._id ? styles.histItemActive : ''}`}>
+                    <button
+                      className={styles.histTitleBtn}
+                      onClick={() => loadThreadMessages(th._id)}>
+                      <span className={styles.histTitle}>{th.title}</span>
+                    </button>
+                    <button
+                      className={styles.histDeleteBtn}
+                      onClick={(e) => deleteThread(th._id, e)}
+                      title="Delete conversation"
+                      aria-label="Delete conversation">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                      </svg>
+                    </button>
+                  </div>
                 ))
               ) : (
                 <p className={styles.histEmpty}>No conversations yet.</p>

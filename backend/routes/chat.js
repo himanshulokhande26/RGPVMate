@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { optionalAuth } = require('../middleware/authGuard');
 const { getEmbedding, searchChunks } = require('../services/retriever');
-const { generateAnswer, condenseQuestion } = require('../services/llm');
+const { generateAnswer, generateAnswerStream, condenseQuestion } = require('../services/llm');
 const { getCached, setCached } = require('../services/cache');
 const Thread = require('../models/Thread');
 const Message = require('../models/Message');
@@ -489,6 +489,177 @@ router.post('/', optionalAuth, async (req, res, next) => {
       return res.status(503).json({ error: 'Embedder service unavailable. Make sure the Python embedder is running.' });
     }
     next(err);
+  }
+});
+
+// POST /api/chat/stream
+// Real SSE streaming endpoint — sends tokens to frontend word-by-word.
+// Uses Server-Sent Events (text/event-stream) so the browser can consume
+// chunks as they arrive, exactly like ChatGPT.
+//
+// The stream sends three event types:
+//   data: {"token": "word"}         — each token as it arrives from Groq
+//   data: {"sources": [...]}        — final sources sent AFTER all tokens
+//   data: {"done": true}            — signals end of stream
+//   data: {"error": "message"}      — on error
+router.post('/stream', optionalAuth, async (req, res) => {
+  const apiStart = Date.now();
+  const { question, semester, branch, history = [], threadId, program } = req.body;
+
+  // ── Input validation ──────────────────────────────────────────────────────
+  if (!question || !question.trim()) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+  if (question.trim().length > 2000) {
+    return res.status(400).json({ error: 'Question is too long (max 2000 characters).' });
+  }
+
+  const q = question.trim();
+
+  // ── Fast-path bypasses (no LLM needed) ────────────────────────────────────
+  function sendJSON(obj) {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  }
+
+  // ── SSE Headers ───────────────────────────────────────────────────────────
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.flushHeaders();
+
+  // Keep-alive ping every 15s to prevent proxy timeouts
+  const pingInterval = setInterval(() => res.write(': ping\n\n'), 15000);
+  req.on('close', () => clearInterval(pingInterval));
+
+  try {
+    // Fast-path for greetings
+    if (isGreeting(q)) {
+      const reply = "Hey! 👋 Great to see you! I'm RGPVMate — your RGPV study companion. What can I help you with today? Syllabus, subjects, exams? 📚";
+      sendJSON({ token: reply });
+      sendJSON({ sources: [], done: true, elapsedSeconds: 0 });
+      clearInterval(pingInterval);
+      return res.end();
+    }
+    if (isSelfIntroQuery(q)) {
+      const reply = "I'm **RGPVMate** 🤖 — an AI assistant built for RGPV students!\n\nI can help you with:\n\n- 📚 **Syllabus** (unit-wise breakdown for any subject)\n- 📋 **Scheme details** (credits, contact hours, electives)\n- 🧠 **Academic concepts** (definitions, explanations, tutorials)\n- 🏫 **RGPV info** (exam patterns, passing criteria, etc.)\n\nWhat would you like to explore?";
+      sendJSON({ token: reply });
+      sendJSON({ sources: [], done: true, elapsedSeconds: 0 });
+      clearInterval(pingInterval);
+      return res.end();
+    }
+    if (isSystemQuery(q)) {
+      const activeModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+      sendJSON({ token: `Bro!! That's a bit personal, can't tell you all my secrets! 😉 But I'm built using Node.js, Express, Qdrant, and Groq (running **${activeModel}**) to help you crack those exams. Ask me about your subjects, syllabus, or notes instead! 📚` });
+      sendJSON({ sources: [], done: true, elapsedSeconds: 0 });
+      clearInterval(pingInterval);
+      return res.end();
+    }
+    if (isAcknowledgment(q)) {
+      const isNegative = /^(no|nope|nah|nahi|na|not now|not really|no thanks|no thank you|nothing else|that's it|no i'm good|no im good|nothing|no more|none)[.!,]?$/i.test(q);
+      sendJSON({ token: isNegative ? 'No worries! 😊 Just come back whenever you need help with something.' : 'Great! 😊 Let me know if there\'s anything else about your subjects or syllabus I can help with!' });
+      sendJSON({ sources: [], done: true, elapsedSeconds: 0 });
+      clearInterval(pingInterval);
+      return res.end();
+    }
+
+    // ── Cache check ───────────────────────────────────────────────────────────
+    const cacheCtx = { program, branch, semester: semester ? Number(semester) : undefined };
+    const cached = await getCached(q, cacheCtx);
+    if (cached) {
+      // Stream cached answer token-by-token at ~60fps for smooth feel
+      const words = cached.answer.split(/(?<=\s)/);  // split but keep spaces
+      for (const word of words) {
+        sendJSON({ token: word });
+        await new Promise(r => setTimeout(r, 8)); // ~125 words/sec
+      }
+      sendJSON({ sources: cached.sources || [], done: true, elapsedSeconds: 0, fromCache: true });
+      clearInterval(pingInterval);
+      return res.end();
+    }
+
+    // ── Determine active academic context ─────────────────────────────────────
+    let activeBranch   = branch   || 'Computer Science Engineering';
+    let activeSemester = semester ? Number(semester) : 5;
+    let activeProgram  = program  || 'B.Tech';
+    if (req.user) {
+      const user = await User.findOne({ $or: [{ googleId: req.user.googleId }, { githubId: req.user.githubId }, { _id: req.user.id }] }).lean();
+      if (user) {
+        if (user.branch)    activeBranch   = user.branch;
+        if (user.semester)  activeSemester = user.semester;
+        if (user.program)   activeProgram  = user.program;
+      }
+    }
+
+    // ── Retrieve context from Qdrant ──────────────────────────────────────────
+    const condensed = await condenseQuestion(q, history);
+    const queryVec   = await getEmbedding(condensed);
+    const filters    = { semester: activeSemester, branch: activeBranch, program: activeProgram };
+    const chunks     = await searchChunks(queryVec, filters, 4);
+    const safeHistory = Array.isArray(history) ? history.slice(-8).map(m => ({ role: m.role, content: m.content })) : [];
+
+    // ── Stream tokens ─────────────────────────────────────────────────────────
+    let fullAnswer = '';
+    const gen = generateAnswerStream(condensed, chunks, safeHistory);
+
+    for await (const token of gen) {
+      // Clean source leaks on individual tokens too
+      const cleanToken = token.replace(/RGPV_[A-Za-z0-9_-]+\.pdf/g, '');
+      fullAnswer += cleanToken;
+      sendJSON({ token: cleanToken });
+    }
+
+    // ── Compute sources ───────────────────────────────────────────────────────
+    const allSources = [...new Set(chunks.map(c => c.metadata?.source).filter(Boolean))];
+    const isRGPVQ    = /\b(syllabus|scheme|subjects?|credits?|passing|cgpa|exams?|rgpv|fees?|backlogs?|pyqs?|notices?)\b/i.test(q);
+    const hasCont    = /syllabus|scheme|unit|credit|subject code|pyq|previous year|exam|notice/.test(fullAnswer.toLowerCase());
+    const isDenial   = /i don't have|not found|cannot find|nahi bata|pata nahi/.test(fullAnswer.toLowerCase());
+    const isTutor    = /\b(explain|what is|how to|how does|define|tutorial)\b/i.test(q) && !/\b(syllabus|scheme|passing|fee|exams?|notices?)\b/i.test(q);
+    const sources    = (!isRGPVQ || !hasCont || isDenial || isTutor) ? [] : allSources;
+
+    const elapsedSeconds = Number(((Date.now() - apiStart) / 1000).toFixed(2));
+
+    // ── Save to cache ─────────────────────────────────────────────────────────
+    const isDontKnow = /i don't have|not found|cannot find|nahi bata|pata nahi/.test(fullAnswer.toLowerCase());
+    if (fullAnswer && !isDontKnow) {
+      setCached(q, fullAnswer, sources, cacheCtx).catch(() => {});
+    }
+
+    // ── Save to chat history (logged-in users only) ────────────────────────────
+    let currentThreadId = threadId || null;
+    if (req.user) {
+      try {
+        const userId = req.user.googleId || req.user.id;
+        if (!currentThreadId) {
+          const newThread = await Thread.create({ userId, title: q.slice(0, 50) });
+          currentThreadId = newThread._id.toString();
+        } else {
+          await Thread.updateOne({ _id: currentThreadId }, { updatedAt: Date.now() });
+        }
+        await Message.create([
+          { threadId: currentThreadId, role: 'user', content: q },
+          { threadId: currentThreadId, role: 'assistant', content: fullAnswer, sources },
+        ]);
+      } catch (e) {
+        console.error('[stream] History save failed:', e.message);
+      }
+    }
+
+    // ── Done sentinel ─────────────────────────────────────────────────────────
+    sendJSON({ sources, done: true, elapsedSeconds, threadId: currentThreadId });
+    clearInterval(pingInterval);
+    res.end();
+
+  } catch (err) {
+    clearInterval(pingInterval);
+    console.error('💥 [stream] Error:', err.message);
+    const is429 = err.status === 429 || (err.message && err.message.includes('429'));
+    sendJSON({ error: is429
+      ? "☕ I've hit my API limit for now. Please wait a minute and try again!"
+      : 'Something went wrong. Please try again.',
+      done: true,
+    });
+    res.end();
   }
 });
 

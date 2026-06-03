@@ -365,4 +365,109 @@ async function generateAnswer(question, chunks, history = []) {
   return { answer, sources: suppressSources ? [] : sources };
 }
 
-module.exports = { condenseQuestion, generateAnswer };
+/**
+ * Streaming variant of generateAnswer — yields token chunks via async generator.
+ * Used by POST /api/chat/stream (SSE endpoint) for real ChatGPT-style streaming.
+ *
+ * @yields {string} token — individual text chunk from the LLM
+ * @returns {{ sources: string[] }} — final sources object after all tokens yielded
+ */
+async function* generateAnswerStream(question, chunks, history = []) {
+  const contextBlock = chunks
+    .map((chunk, i) => {
+      const limit = chunk.metadata && chunk.metadata.isRgpvNotes ? 8000 : MAX_CHUNK_CHARS;
+      const trimmed = chunk.text.length > limit
+        ? chunk.text.slice(0, limit) + ' […]'
+        : chunk.text;
+      return '[Chunk ' + (i + 1) + ' — Source: ' + chunk.metadata.source + ']\n' + trimmed;
+    })
+    .join('\n\n');
+
+  const userMessage = [
+    'CONTEXT (retrieved from RGPV documents):',
+    contextBlock || 'No relevant context found.',
+    '',
+    'STUDENT QUESTION:',
+    question,
+  ].join('\n');
+
+  const isTutorialOrCasual = /\b(what is|explain|how to|how does|define|tutorial)\b/i.test(question)
+    && !/\b(syllabus|scheme|passing|fee|exams?|notices?|announcements?)\b/i.test(question);
+
+  let fullAnswer = '';
+  let attempts = 0;
+  const maxAttempts = clients.length || 1;
+
+  while (attempts < maxAttempts) {
+    try {
+      const currentClient = clients[currentClientIndex];
+      if (!currentClient) throw new Error('No Groq clients initialized');
+
+      const stream = await currentClient.chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...history,
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.55,
+        max_tokens: isTutorialOrCasual ? 700 : 1024,
+        stream: true,
+      });
+
+      currentClientIndex = (currentClientIndex + 1) % clients.length;
+
+      for await (const chunk of stream) {
+        const token = chunk.choices[0]?.delta?.content || '';
+        if (token) {
+          fullAnswer += token;
+          yield token;
+        }
+      }
+      break;
+    } catch (err) {
+      const is429 = err.status === 429 || (err.message && err.message.includes('429'));
+      if (is429 && clients.length > 1 && attempts < maxAttempts - 1) {
+        attempts++;
+        currentClientIndex = (currentClientIndex + 1) % clients.length;
+        console.warn(`⚠️ Stream: Groq Key rate limited. Rotating key...`);
+        continue;
+      }
+      // Fallback to Gemini (non-streaming — emit whole answer at once)
+      if (is429 && geminiClient) {
+        try {
+          const geminiModel = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
+          const geminiPrompt = [SYSTEM_PROMPT, ...history.map(m => (m.role === 'user' ? 'STUDENT: ' : 'ASSISTANT: ') + m.content), userMessage].join('\n\n');
+          const result = await geminiModel.generateContent(geminiPrompt);
+          fullAnswer = result.response.text().trim();
+          yield fullAnswer;
+          break;
+        } catch (geminiErr) {
+          throw geminiErr;
+        }
+      }
+      throw err;
+    }
+  }
+
+  // Clean up LLM-injected source lines
+  fullAnswer = fullAnswer
+    .replace(/^[ \t]*\*{0,2}sources?\*{0,2}:[^\n]*/gim, '')
+    .replace(/[ \t]*[([][ \t]*(?:source|sources|ref|reference|from)?[ \t]*:?[ \t]*RGPV_[A-Za-z0-9_-]+\.pdf[\])]/gi, '')
+    .trim();
+
+  // Compute sources (reuse same suppression logic)
+  const sources = [...new Set(chunks.map(c => c.metadata.source).filter(Boolean))];
+  const isRGPVQuery = /\b(syllabus|scheme|subjects?|sems?|semesters?|credits?|passing|cgpa|exams?|rgpv|btech|fees?|backlogs?|pyqs?|previous\s+year|old\s+paper|question\s+paper|notices?)\b/i.test(question);
+  const hasRGPVContent = /syllabus|scheme|unit|credit|subject code|pyq|previous year|exam|notice/.test(fullAnswer.toLowerCase());
+  const isDenial = /i don't have|not found|cannot find|nahi bata|pata nahi/.test(fullAnswer.toLowerCase());
+  const isTutorial = /\b(explain|what is|how to|how does|define|tutorial)\b/i.test(question) && !/\b(syllabus|scheme|passing|fee|exams?|notices?)\b/i.test(question);
+
+  const suppressSources = !isRGPVQuery || (!hasRGPVContent) || isDenial || isTutorial;
+
+  // Yield a special sentinel with metadata so the frontend knows when streaming is done
+  return { sources: suppressSources ? [] : sources, fullAnswer };
+}
+
+module.exports = { condenseQuestion, generateAnswer, generateAnswerStream };
+
