@@ -266,4 +266,5 @@ async function listDocuments() {
   return Object.entries(counts).map(([source, chunks]) => ({ source, chunks }));
 }
 
-module.exports = { getEmbedding, addChunks, searchChunks, deleteChunksBySource, listDocuments };
+module.exports = { getEmbedding, addChunks, searchChunks, deleteChunksBySource, listDocuments, normalizeBranch };
+

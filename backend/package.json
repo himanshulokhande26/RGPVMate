@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "test": "jest --testPathPatterns=tests/ --forceExit --detectOpenHandles",
+    "test:watch": "jest --testPathPatterns=tests/ --watch",
     "ingest": "node scripts/ingest.js",
     "scrape": "node scripts/scrape.js",
     "scrape:dry": "node scripts/scrape.js --dry-run",
@@ -52,7 +54,14 @@
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
+    "jest": "^30.4.2",
     "nodemon": "^3.0.0",
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 15000,
+    "verbose": true
   }
 }
