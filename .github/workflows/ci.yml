@@ -1,0 +1,77 @@
+name: CI — RGPVMate Backend Tests
+
+on:
+  push:
+    branches: [main, Branch-vH1.0.4, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_test_jwt_secret_key
+      QDRANT_URL: http://localhost:6333
+      QDRANT_API_KEY: test_key
+      GROQ_API_KEY: test_groq_key
+      GEMINI_API_KEY: test_gemini_key
+      EMBEDDER_URL: http://localhost:5000
+      MONGODB_URI: mongodb://localhost:27017/rgpvmate_test
+      ADMIN_PASSWORD: test_admin_password
+      FRONTEND_URL: http://localhost:3001
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Upload test results (if failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: backend/tests/
+
+  lint:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
