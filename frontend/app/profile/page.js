@@ -251,7 +251,7 @@ export default function ProfilePage() {
             <hr className={styles.panelDivider} />
 
             {/* Academic Context */}
-            <div className={styles.panelHeader}>
+            <div className={styles.panelHeader} style={{ marginTop: '1.5rem' }}>
               <h2 className={styles.panelTitle}>Academic Context</h2>
               <p className={styles.panelDesc}>
                 Responses are <strong>strictly tailored</strong> to your program, branch, and semester.

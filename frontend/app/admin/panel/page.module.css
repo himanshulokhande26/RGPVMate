@@ -251,69 +251,119 @@
 .docsSection {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
+}
+
+.sectionHint {
+  font-size: 0.75rem;
+  color: var(--text-4);
 }
 
 .uploadForm {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 24px;
+  gap: 20px;
 }
+
+/* Drag & drop file zone */
+.fileZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border: 1.5px dashed var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  min-height: 120px;
+  text-align: center;
+}
+.fileZone:hover { border-color: var(--text-4); background: var(--surface-3); }
+.fileZoneDrag   { border-color: var(--text-2) !important; background: var(--surface-3) !important; }
+
+.fileZoneText { font-size: 0.875rem; font-weight: 500; color: var(--text-2); }
+.fileZoneHint { font-size: 0.75rem; color: var(--text-4); }
+.fileZoneName { font-size: 0.875rem; font-weight: 500; color: var(--text); }
+.fileZoneSize { font-size: 0.75rem; color: var(--text-4); }
+.fileZoneRemove {
+  margin-top: 4px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* 2-column form grid */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 700px) { .formGrid { grid-template-columns: 1fr; } }
 
 .formRow {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.formRow label {
+.formLabel {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-2);
 }
 
-.formRow input, .formRow select {
+.formOptional {
+  font-weight: 400;
+  color: var(--text-4);
+  font-size: 0.75rem;
+}
+
+/* Unified input/select style — single border, no double outline */
+.formInput,
+.formSelect {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 10px 14px;
+  padding: 9px 12px;
   color: var(--text);
   font-size: 0.875rem;
-  outline: none;
   font-family: inherit;
+  outline: none;
+  width: 100%;
   transition: border-color var(--transition), background var(--transition);
 }
-
-.formRow input:focus, .formRow select:focus {
+.formInput:focus, .formSelect:focus {
   border-color: var(--border-2);
   background: var(--surface-3);
 }
+/* Fix double border on native select */
+.formSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
 
-.formRow input[type="file"] {
-  padding: 8px 12px;
-  color: var(--text-3);
-}
-.formRow input[type="file"]::file-selector-button {
-  background: var(--surface-3);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-sm);
-  color: var(--text-2);
-  padding: 4px 10px;
-  margin-right: 12px;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-.formRow input[type="file"]::file-selector-button:hover {
-  background: var(--border);
+.uploadFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .submitBtn {
-  margin-top: 8px;
-  padding: 12px 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
   background: var(--text);
   color: var(--bg);
   border: none;
@@ -323,15 +373,68 @@
   cursor: pointer;
   transition: background var(--transition);
 }
-.submitBtn:hover:not(:disabled) {
-  background: var(--text-2);
-}
-.submitBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.submitBtn:hover:not(:disabled) { background: var(--text-2); }
+.submitBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Ingested Documents table */
+.docsTable {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
+.docsTableHeader {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px;
+  padding: 8px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+}
+
+.docsRow {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.docsRow:last-child { border-bottom: none; }
+.docsRow:hover { background: var(--surface-2); }
+
+.docSource {
+  font-size: 0.8125rem;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docChunks {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.chunkBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+.chunkLabel { font-size: 0.7rem; color: var(--text-4); }
+
 .deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.75rem;
   color: var(--error);
   background: var(--error-bg);
@@ -341,6 +444,4 @@
   cursor: pointer;
   transition: background var(--transition);
 }
-.deleteBtn:hover {
-  background: rgba(248,113,113,0.2);
-}
+.deleteBtn:hover { background: rgba(248,113,113,0.2); }
